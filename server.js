@@ -110,11 +110,11 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/api/director/next') {
     if (!isLocal(req)) return json(res, 403, {});
-    return json(res, 200, await director.next(Math.min(590, Number(url.searchParams.get('wait')) || 30) * 1000));
+    return json(res, 200, await director.next(Math.min(590, Number(url.searchParams.get('wait')) || 30) * 1000, url.searchParams.get('role') || 'all'));
   }
   if (p === '/api/director/patch' && req.method === 'POST') {
     if (!isLocal(req)) return json(res, 403, {});
-    const b = await body(req, 400000); const out = director.apply(b.patch || b, { opening: !!b.opening, final: !!b.final }); broadcast();
+    const b = await body(req, 400000); const out = director.reply(b); broadcast();
     return json(res, 200, out);
   }
   if (p === '/api/config') return json(res, 200, { question: director.question(), joinUrl: JOIN_URL, embeddings: embeddingStatus.state, treatments: Object.fromEntries(CONCEPTS.map(c => [c.id, c.treatment])) });

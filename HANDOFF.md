@@ -149,6 +149,27 @@ Then drive the app as the host: open the display, press `S`, propose and pick an
 answers from the answer page or with `node tools/replay.js ai 1`, then *Settle now* and
 *Final image*.
 
+### Faster: one reader and several cartoonists
+
+The same split the API mode uses can be run in test-session mode, with different models per role:
+
+- **Reader** (one worker, the stronger model): `node tools/director-wait.js 120 --role read --system <file>`.
+  It gets `open`, `fast` and `final` requests. A `fast` reply has no code: feelings, ideas, number
+  moves, removals, the note, and a `draw` list of briefs. Send with `director-reply.js <file> --fast`.
+- **Cartoonists** (two or more workers, can be a lighter model): `... --role draw`. Each request is one
+  brief (`KIND: draw`, `JOB: n`); a rewrite includes the element's current code. Send with
+  `director-reply.js <file> --draw --job <n>`.
+- `--system <file>` writes the unchanging system prompt once; the request itself is printed, so a
+  worker reads the long prompt only once. Chain the next wait onto the send command to save a step.
+
+Measured on 2026-11-21 with a Sonnet reader and two Haiku cartoonists (two batches of three answers):
+answers were read, and numbers, mood and feed colours updated, 12-15 s after sending (36 s before);
+each drawing then took 12-44 s (the first ones slowest, while the workers read the prompt), and
+with only two cartoonists six drawings queued, so everything was in about 60-75 s after each batch.
+More cartoonists would shorten that. Haiku's drawings ran without errors and looked acceptable,
+a little cruder than Sonnet's. In API mode the equivalent is `DIRECTOR_MODEL` for the reader and
+`DRAW_MODEL` for the drawings (untested).
+
 Step 3 and 4 are separate on purpose: a chained command once sent a stale reply as the final.
 
 ## 5. What has been tested
@@ -203,7 +224,9 @@ checked with one Sonnet session (opening plus two batches, 37 s and 36 s per bat
   requests (time taken, ideas and which elements they touch, what was drawn, anything not applied).
   It showed the whole prompt is only about 3,600 tokens, so the wait is the model writing drawing
   code, not reading the prompt.
-Not started: 5 (animation option), 6-7 (two-model split, leaner prompt),
+- items 6-7: the read/draw split above. A leaner prompt was not pursued: the prompt is only about
+  3,600 tokens, the time goes on writing drawing code.
+Not started: 5 (animation option),
 10 (open rooms), 12 (continuous interpretation), 14 (more tone sliders), 15 (load management).
 
 Organised from the owner's notes after watching a Sonnet session and an Opus session. Their own

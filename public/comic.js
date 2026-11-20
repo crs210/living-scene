@@ -344,6 +344,7 @@ function renderDev(scene) {
   if (!d.queue.length) add(box, 'div', 'dim', 'nothing waiting'); for (const a of d.queue) add(box, 'div', 'ans', '· ' + a);
   add(box, 'h3', '', '2  WITH THE DIRECTOR  (' + open.length + ')');
   if (!open.length) add(box, 'div', 'dim', 'idle');
+  if (d.toDraw && d.toDraw.length) add(box, 'div', 'dim', 'waiting for a free cartoonist: ' + d.toDraw.join(', '));
   for (const j of open) {
     const b = add(box, 'div', 'job live');
     add(b, 'div', 'hot', '#' + j.n + ' ' + j.kind + '  ·  ' + secs(d.now - j.sentAt) + ' so far  ·  prompt ' + tok(j.promptChars) + ' (' + tok(j.requestChars) + ' of it changes each time)');

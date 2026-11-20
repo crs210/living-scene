@@ -148,15 +148,17 @@ export function createDirector({ question: q0 }) {
   const nextReveal = () => (revealClock = Math.max(Date.now() + 1200, revealClock + GAP));
   const zero = () => Object.fromEntries(F.map(f => [f, 0]));
   let recent = zero(), total = zero(), weight = 0;
-  let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiter = null, inFlight = 0;
+  let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
   const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';
+  const drawModel = process.env.DRAW_MODEL || model;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
   const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
   const recorded = () => !hasKey() && !!process.env.DIRECTOR_RECORDED;
   const sessionMode = () => !hasKey() && !recorded();
   const mode = () => recorded() ? 'recorded demo' : (hasKey() ? 'Claude (' + model + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
-  const wake = () => { if (waiter) { const w = waiter; waiter = null; w(); } };
+  const wake = () => { const ws = waiters; waiters = []; for (const w of ws) w(); };
+  const wakeDraw = () => { const ws = drawWaiters; drawWaiters = []; for (const w of ws) w(); };
   const cacheFile = () => path.join(process.cwd(), '.cache', 'opening-v2-' + crypto.createHash('sha1').update(question + (chosen ? '|' + chosen.title : '')).digest('hex').slice(0, 10) + '.json');
   const loadOpening = () => { try { for (const e of JSON.parse(fs.readFileSync(cacheFile(), 'utf8'))) live.set(e.id, { ...structuredClone(e), theme: null, opening: true }); } catch {} };
   loadOpening();
@@ -225,7 +227,7 @@ export function createDirector({ question: q0 }) {
         const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
         return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
       });
-      return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), jobs: jobs.slice(-8) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
+      return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
         themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
     }
     const els = BASE.map(e => ({ ...e, base: true, params: { ...e.params } }));
@@ -253,8 +255,8 @@ export function createDirector({ question: q0 }) {
     const owed = [...themes].filter(([k2, t]) => !pictured.has(k2) && t.count >= 2).sort((a, b) => b[1].count - a[1].count).map(([k2, t]) => `${k2} (${t.count})`).join(', ');
     const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply; move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.${owed ? `\nOWED A PICTURE: these themes have been voiced more than once and still have no element: ${owed}. Draw them before anything voiced only once.` : ''}`;
     const list = `New answers in this batch (${answers.length}):\n${answers.map(a => `- ${a}`).join('\n')}`;
-    if (kind === 'fast') return { system: SYSTEM, user: head + controls + '\n\n' + list + '\n\nFAST PASS: write no code and leave "add" empty. For each new or rewritten element you want, add a brief to a "draw" list: { "id", "theme", "layer", "brief" } where brief says what it is, where, how big, and what its numbers mean.' };
-    if (kind === 'draw') return { system: SYSTEM, user: head + controls + '\n\n' + list + `\n\nDRAW PASS: write exactly ONE element, returned alone in "add", for this brief:\n${JSON.stringify(extra)}\nLeave every other list empty and all feelings 0.` };
+    if (kind === 'fast') return { system: SYSTEM, user: head + controls + '\n\n' + list + '\n\nFAST PASS: be quick. Write no code and leave "add" empty. Do everything else now: feelings, ideas with "touches", "set" (move numbers), "remove", "note". Then, for each new or rewritten element you want, add a brief to a "draw" list: { "id", "theme", "layer", "brief" }. To change an existing element use its id. Each brief goes to a separate cartoonist who sees the scene list but not your thoughts, so say in two or three sentences: what it is, in which mood (grim, idealised, playful), where it stands and how big, what it is attached to or does to its neighbours, and what its numbers mean.' };
+    if (kind === 'draw') return { system: SYSTEM, user: head + controls + '\n\n' + list + `\n\nDRAW PASS: write exactly ONE element, returned alone in "add" (with "at" and "enter"), for this brief:\n${JSON.stringify(extra)}\n${live.get(extra?.id) ? `This REWRITES the existing element "${extra.id}": keep what it shows and add the change. Its current code:\n${live.get(extra.id).code}\n` : ''}Leave every other list empty and all feelings 0.` };
     return { system: SYSTEM, user: head + controls + '\n\n' + list };
   }
 
@@ -348,7 +350,7 @@ export function createDirector({ question: q0 }) {
     }
     const { system, user } = prompt(kind, answers, extra), t0 = performance.now(), job = begin(kind, answers || [], { system, user }, extra?.brief);
     const res = await client.messages.parse({
-      model, max_tokens: kind === 'open' ? 24000 : kind === 'fast' || kind === 'concepts' ? 3000 : 10000,
+      model: kind === 'draw' ? drawModel : model, max_tokens: kind === 'open' ? 24000 : kind === 'fast' || kind === 'concepts' ? 3000 : 10000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],     // identical on every call, so it caches
       output_config: { format: kind === 'concepts' ? formats.concepts : formats.patch, effort: 'low' },
       messages: [{ role: 'user', content: user }],
@@ -389,21 +391,43 @@ export function createDirector({ question: q0 }) {
     pump(done);
   }
   // session mode: hand the next piece of work to whoever is acting as director
-  const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' ? { answers } : {}), ...p }; };
-  async function next(waitMs) {
+  const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' || kind === 'fast' ? { answers } : {}), ...p }; };
+  // role 'all' (default): one director does everything, a whole batch per reply.
+  // role 'read': feelings, themes, numbers and briefs only (fast). role 'draw': one drawing per request; run several at once.
+  async function next(waitMs, role = 'all') {
     if (!sessionMode()) return { kind: 'none', reason: 'not in session mode' };
+    if (role === 'draw') {
+      if (!drawQueue.length) await new Promise(r => { drawWaiters.push(r); setTimeout(r, waitMs); });
+      const d = drawQueue.shift(); if (!d) return { kind: 'idle' };
+      const p = prompt('draw', d.answers, d.brief), job = begin('draw', d.answers, p, d.brief.id + ': ' + String(d.brief.brief || '').slice(0, 400));
+      return { kind: 'draw', job: job.n, id: d.brief.id, ...p };
+    }
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
     if (!live.size) return issue('open');
-    if (!queue.length && !wantFinal) await new Promise(r => { waiter = r; setTimeout(r, waitMs); });
+    if (!queue.length && !wantFinal) await new Promise(r => { waiters.push(r); setTimeout(r, waitMs); });
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
-    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); return issue('patch', answers); }
+    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); lastBatch = answers; return issue(role === 'read' ? 'fast' : 'patch', answers); }
     if (wantFinal) { wantFinal = false; return issue('final'); }
     return { kind: 'idle' };
   }
 
-  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
+    // a reply posted by whoever is acting as director (test-session mode)
+    reply(b) {
+      const patch = b.patch || b;
+      if (b.draw) { const a = (patch.add || [])[0]; if (!a) return { rejected: ['no element in reply'] }; return apply({ add: [a], _job: jobs.find(j => j.n === Number(b.job)) }, { partial: true }); }
+      if (b.fast) {
+        const cap = Math.max(maxAdd(inFlight), issuedCap), answers = lastBatch;
+        const out = apply({ ...patch, add: [] }, {});
+        const briefs = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id).slice(0, cap);
+        for (const d of briefs) drawQueue.push({ brief: d, answers });
+        wakeDraw();
+        return { ...out, toDraw: briefs.map(d => d.id), dropped: (patch.draw || []).slice(cap).map(d => d.id) };
+      }
+      return apply(patch, { opening: !!b.opening, final: !!b.final });
+    },
     tick(done) { if (endsAt && !isFinal && Date.now() > endsAt) { endsAt = 0; settleNow = true; wantFinal = true; sessionMode() ? wake() : pump(done); } },
     control(b, done) {
       if (typeof b.abstraction === 'number') settings.abstraction = clamp(b.abstraction);
