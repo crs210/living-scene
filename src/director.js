@@ -49,6 +49,12 @@ The picture is a list of elements: { id, theme, layer, desc, code, params }.
     Ready-made: k.figure(x, y, heightPx, coat, {walk: phase, sit, arms, bowed, hair})   k.tree(x, y, heightPx, {bare, bloom, leaf, flower, sway, seed})
       k.cloud(x, y, width, fill, {dark})   k.smoke(x, y, amount, colour, t, wind)   k.sparkle(x, y, r, colour)
       k.crack(x, y, length, seed)   k.boards(x, y, w, h)   k.scribble(x, y, w, h, colour, seed)
+      k.building(xCentre, yGround, w, h, colour, {lit: 0..1, boarded: 0..1, cracks: 0..1, roof: 'flat', door: false, seed})  windows, door, roof, shaded side
+      k.fence(x1, yGround, x2, height, colour, {gap, broken: 0..1})   k.rope(x1, y1, x2, y2, sag, lw, colour, {links: true})  cable or chain
+      k.wave(yCrest, amplitude, wavelength, t, fill, {speed})  a band of water or hills across the frame
+      k.eye(x, y, halfWidth, {look: [dx, dy], lid: 0..1, iris})   k.hand(x, y, size, angleRadians, colour, {closed: 0..1, sleeve})
+      k.flame(x, y, size, t)   k.gear(x, y, r, teeth, fill, angle)   k.stairs(x, yBottom, w, h, steps, colour)   k.flock(x, y, spread, count, t)
+    Prefer these to hand-building the same thing; spend your lines on what makes the idea specific.
     Maths: k.clamp(x, 0, 1)   k.lerp(a, b, u)   k.mix('#hex', '#hex', u)   k.rand(n) stable 0..1
 Code rules: plain ES5 (var, function, for loops with fixed bounds); only k, p, t, m and Math; no "while", no globals; colours '#rrggbb';
 single quotes for strings. Aim for 15 to 35 lines per element. Layers: 0 backdrop .. 9 nearest foreground. Ink #15111c, paper #fbf6e9.
