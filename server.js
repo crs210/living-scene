@@ -110,7 +110,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/api/director/next') {
     if (!isLocal(req)) return json(res, 403, {});
-    return json(res, 200, await director.next(Math.min(590, Number(url.searchParams.get('wait')) || 30) * 1000, url.searchParams.get('role') || 'all'));
+    return json(res, 200, await director.next(Math.min(590, Number(url.searchParams.get('wait')) || 30) * 1000, url.searchParams.get('role') || 'all', () => req.socket.destroyed));
   }
   if (p === '/api/director/patch' && req.method === 'POST') {
     if (!isLocal(req)) return json(res, 403, {});

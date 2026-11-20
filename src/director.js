@@ -394,10 +394,11 @@ export function createDirector({ question: q0 }) {
   const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' || kind === 'fast' ? { answers } : {}), ...p }; };
   // role 'all' (default): one director does everything, a whole batch per reply.
   // role 'read': feelings, themes, numbers and briefs only (fast). role 'draw': one drawing per request; run several at once.
-  async function next(waitMs, role = 'all') {
+  async function next(waitMs, role = 'all', gone = () => false) {   // gone(): the asker hung up while waiting, so it must not be handed work
     if (!sessionMode()) return { kind: 'none', reason: 'not in session mode' };
     if (role === 'draw') {
       if (!drawQueue.length) await new Promise(r => { drawWaiters.push(r); setTimeout(r, waitMs); });
+      if (gone()) return { kind: 'idle' };
       const d = drawQueue.shift(); if (!d) return { kind: 'idle' };
       const p = prompt('draw', d.answers, d.brief), job = begin('draw', d.answers, p, d.brief.id + ': ' + String(d.brief.brief || '').slice(0, 400));
       return { kind: 'draw', job: job.n, id: d.brief.id, ...p };
@@ -405,6 +406,7 @@ export function createDirector({ question: q0 }) {
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
     if (!live.size) return issue('open');
     if (!queue.length && !wantFinal) await new Promise(r => { waiters.push(r); setTimeout(r, waitMs); });
+    if (gone()) return { kind: 'idle' };
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
     if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); lastBatch = answers; return issue(role === 'read' ? 'fast' : 'patch', answers); }
     if (wantFinal) { wantFinal = false; return issue('final'); }

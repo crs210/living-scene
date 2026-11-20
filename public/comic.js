@@ -401,7 +401,7 @@ fetch('/api/config').then(r => r.json()).then(c => {
   const qr = document.getElementById('qr'); qr.onerror = () => qr.remove(); qr.src = '/qr.svg';
 });
 // sliders: abstraction (how literal or dreamlike) and magnitude (how much each batch changes)
-const setting = b => fetch('/api/settings', { method: 'POST', body: JSON.stringify(b) });
+const setting = b => fetch('/api/settings', { method: 'POST', body: JSON.stringify(b) }).then(r => { if (r.status === 403) alert('The controls only work when this display is opened at http://localhost:' + location.port + '/comic on the computer running the app.'); return r; });
 for (const key of ['abstraction', 'magnitude']) document.getElementById(key).addEventListener('input', e => { slidersTouched = true; setting({ [key]: +e.target.value }); });
 document.getElementById('start').onclick = () => setting({ start: +document.getElementById('secs').value || 120 });
 document.getElementById('settle').onclick = () => setting({ settle: true });
