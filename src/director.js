@@ -1,136 +1,32 @@
 // The director: turns batches of audience answers into a changing comic panel, as code.
 //
-// What Claude decides                          What the app does with it
-//   feelings in this batch (nine of them)   ->  blended into the room's atmosphere: light, colour,
-//                                               weather, wear and bloom across the whole panel
-//   ideas: which THEME each answer belongs to -> a running tally. An element's weight (p.w) follows
-//                                               its theme's share of the room, so repeated ideas grow
-//                                               by themselves and passing remarks shrink and are pruned
-//   set / add / remove                       ->  eased, grown in, faded out
-//   note: one line on what the picture says  ->  kept as the journey and fed back next time
+// What the model decides                       What the app does with it
+//   feelings in this batch (nine of them)   ->  blended into the atmosphere: light, colour, weather,
+//                                               wear and bloom across the whole panel
+//   ideas: which THEME each answer joins    ->  a running tally. An element's weight (p.w) follows its
+//                                               theme's share of the room, so repeats grow by themselves;
+//                                               themes the room drops recede, and are pruned only when full
+//   set / add / remove                      ->  eased; revealed one piece at a time, each with an entrance
+//   note: one line on what the picture says ->  kept as the journey and fed back next time
 //
-// The session moves through phases: upheaval (answers overturn the opening), building,
-// settling (weights sharpen toward what dominates), final (one composed image, held).
+// Phases: upheaval (answers overturn the opening), building, settling, final (one composed image, held).
 //
-// Modes: API (ANTHROPIC_API_KEY), session (no key: requests queue for a Claude Code session via
-// tools/director-wait.js and director-reply.js), recorded (DIRECTOR_RECORDED=1).
+// Three ways to supply the model:
+//   test session (default)  requests queue; a Claude Code session answers with tools/director-wait.js and
+//                           tools/director-reply.js, as one worker or as a reader plus cartoonists
+//   API                     ANTHROPIC_API_KEY set: a fast pass, then one request per drawing in parallel
+//   mock                    DIRECTOR_MOCK=1: canned replies through the API path, to test the plumbing
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { BASE, REACT, NEWSTARS } from './comic-library.js';
+import { FEELINGS, F, SYSTEM, abstractionText, PHASE_TEXT } from './prompt.js';
 
-export const FEELINGS = {
-  hope: 'things could turn out well', dread: 'fear of what is coming', wonder: 'awe, excitement, curiosity',
-  anger: 'outrage, unfairness, resentment', grief: 'loss, sadness, missing what is going',
-  belonging: 'connection, togetherness, care', agency: 'feeling capable, empowered, free to act',
-  unease: 'doubt, mistrust, mixed feelings, not knowing', urgency: 'speed, pressure, overwhelm',
-};
-const F = Object.keys(FEELINGS);
+export { FEELINGS };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
 const MAX_ARRIVALS = 14;               // elements beyond the opening; the weakest theme gives way after that
 
-const KIT_DOC = `HOW THE PICTURE IS MADE
-The picture is a list of elements: { id, theme, layer, desc, code, params }.
-"code" is the BODY of a JavaScript function (k, p, t, m), run every frame on a 1600 x 900 canvas (x right, y down).
-  p = this element's own numbers, eased toward their latest values; they start at 0 when an element is new, so it grows in.
-  p.w = SUPPLIED BY THE APP for every element that has a theme: 0..1, how much of the room is behind that theme right now.
-        It rises by itself each time the theme is repeated and falls as the room moves on. Your code MUST use it for scale
-        and prominence: at p.w 0.2 the thing is a modest presence, at p.w 1 it dominates the frame.
-  t = seconds, for motion.
-  m = the room's atmosphere, the same for every element (0..1 unless noted): m.decay run-down, m.bloom flourishing,
-      m.light brightness (0.6 neutral), m.warmth -1 cold..+1 warm, m.storm, m.wind, m.bond people gathering, m.tension.
-  k = the ONLY drawing API. It inks and prints everything in one comic style. Rain, mist, colour grading and grain are added
-      over the whole panel automatically from the atmosphere: never draw those yourself.
-    k.shape(points, fill, {lw, curve, a})  closed polygon; points [[x,y],...]; lw ink width (default 4, 0 none); curve:true smooths
-    k.rect(x, y, w, h, fill, opts)   k.blob(x, y, rx, ry, fill, opts)   k.line(points, lw, colour, {a, curve})
-    k.dots(points, colour, size, gap, {fade:'up'|'down', a})  halftone screen clipped to a polygon
-    k.hatch(points, colour, gap)   k.glow(x, y, r, colour, a)   k.burst(x, y, rOuter, rInner, spikes, fill, opts)
-    k.alpha(a, function () { ... })  group opacity
-    Ready-made: k.figure(x, y, heightPx, coat, {walk: phase, sit, arms, bowed, hair})   k.tree(x, y, heightPx, {bare, bloom, leaf, flower, sway, seed})
-      k.cloud(x, y, width, fill, {dark})   k.smoke(x, y, amount, colour, t, wind)   k.sparkle(x, y, r, colour)
-      k.crack(x, y, length, seed)   k.boards(x, y, w, h)   k.scribble(x, y, w, h, colour, seed)
-      k.building(xCentre, yGround, w, h, colour, {lit: 0..1, boarded: 0..1, cracks: 0..1, roof: 'flat', door: false, seed})  windows, door, roof, shaded side
-      k.fence(x1, yGround, x2, height, colour, {gap, broken: 0..1})   k.rope(x1, y1, x2, y2, sag, lw, colour, {links: true})  cable or chain
-      k.wave(yCrest, amplitude, wavelength, t, fill, {speed})  a band of water or hills across the frame
-      k.eye(x, y, halfWidth, {look: [dx, dy], lid: 0..1, iris})   k.hand(x, y, size, angleRadians, colour, {closed: 0..1, sleeve})
-      k.flame(x, y, size, t)   k.gear(x, y, r, teeth, fill, angle)   k.stairs(x, yBottom, w, h, steps, colour)   k.flock(x, y, spread, count, t)
-    Prefer these to hand-building the same thing; spend your lines on what makes the idea specific.
-    Maths: k.clamp(x, 0, 1)   k.lerp(a, b, u)   k.mix('#hex', '#hex', u)   k.rand(n) stable 0..1
-Code rules: plain ES5 (var, function, for loops with fixed bounds); only k, p, t, m and Math; no "while", no globals; colours '#rrggbb';
-single quotes for strings. Aim for 15 to 35 lines per element. Layers: 0 backdrop .. 9 nearest foreground. Ink #15111c, paper #fbf6e9.
-Keep one bold palette of 5 to 7 flat colours for the whole scene.`;
-
-const SYSTEM = `You are the art director and cartoonist of ONE continuous comic-book panel, projected to a live audience. The audience answers an open question on their phones and the panel changes while they watch. The aim is "a picture paints a thousand words": the picture travels with how the room feels, is visibly overturned by what people say, and by the end settles into a single image that holds their collective answer. You never restart: you maintain one living shot.
-
-${KIT_DOC}
-
-THE STATE-OF-REPAIR RULE
-Every element carries its own response to the atmosphere, in a way native to the thing and the setting. As m.decay rises it wears (broken, boarded, cracked, bare, toppled, overgrown, scrawled-on, dimmed); as m.bloom rises it thrives (mended, lit, painted, leafed, flowering, busy). m.storm and m.wind bend what can bend; m.bond gathers figures.
-This applies to elements you add later as much as to the opening. Start every element with "var d = m.decay, b = m.bloom;" and make BOTH change what is drawn, not just its colour: one thing that appears or breaks as d rises, one that appears or mends as b rises.
-
-THE NINE FEELINGS
-${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
-Report how strongly each is present in the batch, 0..1. They are not opposites; a room can hold several at once.
-
-THEMES (how repetition works)
-Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. For each idea also list "touches": the ids of the existing elements that idea changes (may be empty). When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
-
-TURNING THOUGHTS INTO PICTURES
-The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN to this place for a stranger to feel that? Then draw the event, big.
-  a named thing (data centres, a hospital, a fence): it arrives as itself, at a scale that matters, and does something to its surroundings.
-  a bare feeling ("scary", "exciting"): no new object. Change weather, light, the state of repair, what crowds do; deepen themes already present.
-  an opinion or judgement ("nobody asked us"): show the act it implies. People shut outside a gate; a decision made in a lit room they cannot enter.
-  a question or doubt ("who is in charge?"): show the absence. An empty seat at the controls; a signpost pointing every way; a door with no handle.
-  a memory or loss ("my grandad would have loved it"): show the trace. An empty chair kept at the table; the outline where something stood.
-  a contradiction ("lovely and sad"): show both at once in one object. A window warm inside, raining outside.
-  a prediction ("we will adapt"): show the place mid-change. New growth through old cracks; scaffolding turning into something lived in.
-  a process ("always rushing to catch up"): show the mechanism. A road that lengthens ahead of the walker; a tide outpacing people on the sand.
-Reach for these, not for a small person performing the idea: scale shifts, architecture that changes, ground that splits or rises, light sources, things tethered or cut loose, shadows and reflections that disagree with their owners, things out of place, things half-built or half-buried, paths, thresholds, horizons.
-EDITING WHAT IS ALREADY THERE
-Before adding anything, check each answer against the list of elements. If an answer is about something already in the picture, or would change it ("funny hats", "more trees", "cooler power lines", "make the houses bigger", "the sun turns green"), then REWRITE that element: same id, new code that keeps what it showed and adds the change (the people now wear absurd hats; the pylons now glow). When you rewrite an element that already has a theme, keep that theme (the dinosaur given a hat still belongs to "dinosaurs"); only an opening landmark takes the theme that changed it. Do not fold such an answer into a general theme and move on, and do not add a separate object for it. A small specific request that is visibly honoured matters more to its author than a grand gesture.
-
-THINGS MUST INTERACT
-A new idea never simply lands on top of the scene as one large separate object. Work it INTO what is there, a different way each time: built out of an existing landmark, growing through it, housed inside it, draining it, feeding it, propping it up, crowding it, reflected in it, carried by the people. Every new element must change at least one neighbour too: set a number on it or rewrite it (the data centre's pipe empties the pool; the dinosaur browses the tree someone else asked for; the cottage gains an aerial). In "desc" say what it is attached to.
-
-THE MOOD DECIDES WHICH VERSION YOU DRAW
-The same thing arrives differently depending on the feeling it came with. Voiced with dread or anger, a data centre is a crude windowless slab, oversized, fenced, dumped on the land. Voiced with hope or wonder, it is the idealised version: elegant, lit, planted, fitted into the hillside as if money and care were spent on it. Voiced as a joke, it is playful and absurd. Build that character into the shape itself when you draw, in addition to the decay and bloom response.
-
-At most one new element per batch may be mainly a figure. Never solve two ideas the same way. No lettering, captions, icons or floating symbols.
-
-SIZE
-This is a projector. A new element at p.w 1 should span a third of the frame or more; even at p.w 0.2 it must be at least 120 pixels across. Put it where it reads, in front of anything that would hide it.
-
-OPENING SHOT (when asked)
-The opening is only where the picture starts; within a few batches the audience should have overturned it. So make a stage: a specific place seen from a specific spot, with a clear horizon, three or four LARGE simple landmarks, open ground where things can arrive, and quiet life. Do not pre-load it with imagery that already answers the question. Return 6 to 8 elements with no theme. Give each landmark one or two numbers that could later transform it (not just dim it). In each "desc" (under 240 characters) say what it is, where it sits in canvas coordinates, and what its numbers mean.
-
-EACH BATCH
-You are told the PHASE and the two controls, ABSTRACTION and MAGNITUDE; follow them. Look first at what exists: deepen a present theme through its elements' numbers; connect new ideas to old ones (the pipe that drains the sea runs from the building someone else asked for). You may rewrite any element, including opening landmarks, by returning its id with new code, Themes the room stops voicing recede by themselves (the app shrinks them, fades them and moves them aside), so do NOT remove an element just because it has gone quiet; remove only what the room has contradicted or what you have replaced. Give every element "at": [x, y], the point where it stands (its base), and "enter": how it should arrive: "rise" (up out of the ground), "drop" (from above), "slide" (in from the nearer side), "grow" (swelling from its base) or "fade". The pieces of your reply are revealed one after another in the order you list them in "add", a few seconds apart, so order them as a small story. New element "desc" under 200 characters: what, where, what its numbers mean. End with a "note": one plain sentence on what the whole picture now says.
-
-FINAL IMAGE (when asked)
-No new ideas. Compose one balanced picture: what the room felt most is largest and clearest, passing remarks are removed, unfinished things resolve, and the numbers come to rest.
-
-REPLY FORMAT: only JSON.
-{ "feelings": { ${F.map(f => `"${f}": 0`).join(', ')} },
-  "ideas": [ { "theme": "key", "n": 1, "gist": "five words", "touches": [ "id" ] } ],
-  "set": [ { "id", "params": [ { "name", "value" } ] } ],
-  "add": [ { "id", "theme", "layer", "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
-  "remove": [ "id" ],
-  "note": "..." }
-Lists may be empty. For an opening shot only "add" and "note" matter.`;
-
-const abstractionText = a => a < 0.25 ? 'LITERAL. Show what people name as itself, at believable scale; feelings appear through weather, light, repair and what crowds do.'
-  : a < 0.6 ? 'GROUNDED METAPHOR. Ideas become things that could almost happen in this place.'
-  : a < 0.85 ? 'POETIC. Let scale, gravity and logic bend: things far too large, floating, growing where they should not, merging into each other; the place stays recognisable. Prefer the surprising reading of an answer to the obvious one.'
-  : 'DREAMLIKE. Be bold; the obvious picture is the wrong one. The place is a dream of itself: landmarks turn into other things, objects are made of the wrong material, sizes are absurd, ideas fuse into hybrids (a data centre that is also a beehive; a staircase of open hands), the ground and sky may swap roles. Every reply should contain at least one image nobody in the room would have predicted. Keep just enough landmarks to know it is the same shot.';
-const PHASE_TEXT = {
-  upheaval: 'EARLY. The calm opening is only a starting point: let these answers hit hard. Transform or replace opening landmarks, change the lay of the land, let large things arrive. The audience should see their words overturn the picture. In this reply at least one of your elements must be an OPENING landmark rewritten (same id, new code, give it the theme that changed it) so that the place itself is altered, not just added to.',
-  building: 'MIDDLE. The picture has a direction. Reinforce what the room keeps returning to: move it centre, connect themes to each other. New themes enter at modest size until repeated.',
-  settling: 'LATE. Converge. No new themes unless several answers demand one. Clarify what dominates, let minor things recede, resolve unfinished business.',
-};
-
 export function createDirector({ question: q0 }) {
   let question = q0;
-  const order = [];                              // recorded mode only
   const live = new Map();                        // id -> element
   const themes = new Map();                      // key -> { count, born, last, gist }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
@@ -154,12 +50,11 @@ export function createDirector({ question: q0 }) {
   const drawModel = process.env.DRAW_MODEL || model;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
   const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
-  const recorded = () => !hasKey() && !!process.env.DIRECTOR_RECORDED;
-  const sessionMode = () => !hasKey() && !recorded();
-  const mode = () => recorded() ? 'recorded demo' : (hasKey() ? 'Claude (' + model + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
+  const sessionMode = () => !hasKey();
+  const mode = () => (MOCK ? 'mock replies' : hasKey() ? 'Claude (' + model + (drawModel !== model ? ' + ' + drawModel : '') + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
   const wake = () => { const ws = waiters; waiters = []; for (const w of ws) w(); };
   const wakeDraw = () => { const ws = drawWaiters; drawWaiters = []; for (const w of ws) w(); };
-  const cacheFile = () => path.join(process.cwd(), '.cache', 'opening-v2-' + crypto.createHash('sha1').update(question + (chosen ? '|' + chosen.title : '')).digest('hex').slice(0, 10) + '.json');
+  const cacheFile = () => path.join(process.env.CACHE_DIR || path.join(process.cwd(), '.cache'), 'opening-v2-' + crypto.createHash('sha1').update(question + (chosen ? '|' + chosen.title : '')).digest('hex').slice(0, 10) + '.json');
   const loadOpening = () => { try { for (const e of JSON.parse(fs.readFileSync(cacheFile(), 'utf8'))) live.set(e.id, { ...structuredClone(e), theme: null, opening: true }); } catch {} };
   loadOpening();
 
@@ -215,27 +110,19 @@ export function createDirector({ question: q0 }) {
     weight += n;
   }
 
-  function scene(world, snap) {
-    if (!recorded()) {
-      const w = weights();
-      const now = Date.now(); ghosts = ghosts.filter(g => g.until > now && !live.has(g.el.id));
-      // an element not yet revealed shows as its previous version (or not at all); removed ones linger until their turn
-      const shown = [...live.values()].map(e => e.revealAt > now ? e.was : e).filter(Boolean).concat(ghosts.map(g => g.el));
-      const els = shown.map(({ was, revealAt, ...e }) => {
-        if (!e.theme || w[e.theme] === undefined) return e;
-        const quiet = batchNo - (themes.get(e.theme)?.last ?? batchNo);
-        const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
-        return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
-      });
-      return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
-        themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
-    }
-    const els = BASE.map(e => ({ ...e, base: true, params: { ...e.params } }));
-    for (const id of Object.keys(REACT)) if (world.motifs[id].mass > 0 && !order.includes(id)) { order.push(id); latest = REACT[id].id; }
-    for (const id of order) { const { from, ...e } = REACT[id]; els.push({ ...e, params: from(snap[id], snap[id + '_e']) }); }
-    if (world.stars > 0) els.push({ ...NEWSTARS, params: { count: world.stars } });
-    if (order.includes('jobs')) els.find(e => e.id === 'walkers').params.humans = 6 - snap.jobs * 6;
-    return { mode: mode(), latest, els, m: { val: snap.val, tension: snap.tension, wind: snap.wind }, phase: 'gathering', settings };
+  function scene() {
+    const w = weights();
+    const now = Date.now(); ghosts = ghosts.filter(g => g.until > now && !live.has(g.el.id));
+    // an element not yet revealed shows as its previous version (or not at all); removed ones linger until their turn
+    const shown = [...live.values()].map(e => e.revealAt > now ? e.was : e).filter(Boolean).concat(ghosts.map(g => g.el));
+    const els = shown.map(({ was, revealAt, ...e }) => {
+      if (!e.theme || w[e.theme] === undefined) return e;
+      const quiet = batchNo - (themes.get(e.theme)?.last ?? batchNo);
+      const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
+      return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
+    });
+    return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
+      themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
   }
 
   // ---- the exact text sent to the model ----
@@ -301,7 +188,7 @@ export function createDirector({ question: q0 }) {
         isFinal = true;
         // Keep the finished session: the picture (as its elements), the journey, and the tally.
         try {
-          const dir = path.join(process.cwd(), 'sessions'); fs.mkdirSync(dir, { recursive: true });
+          const dir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions'); fs.mkdirSync(dir, { recursive: true });
           const w = weights();
           fs.writeFileSync(path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '.json'), JSON.stringify({ question, opening: chosen, answers: answersSeen, settings, journey: journal.map(j => j.note), themes: [...themes].map(([k, t]) => ({ theme: k, answers: t.count, weight: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.answers - a.answers), feelings: total, atmosphere: atmosphere(), elements: [...live.values()] }, null, 1));
         } catch (e) { console.error('could not save session:', e.message); }
@@ -385,7 +272,7 @@ export function createDirector({ question: q0 }) {
   }
   // Answers arriving while a request is in flight wait and go together in the next batch.
   function onBatch(texts, done) {
-    if (recorded() || isFinal) return;
+    if (isFinal) return;
     queue.push(...texts);
     if (sessionMode()) return wake();
     pump(done);
@@ -413,7 +300,7 @@ export function createDirector({ question: q0 }) {
     return { kind: 'idle' };
   }
 
-  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
     // a reply posted by whoever is acting as director (test-session mode)
@@ -447,7 +334,7 @@ export function createDirector({ question: q0 }) {
     },
     question: () => question,
     seen: () => answersSeen,
-    status: () => ({ mode: mode(), model, question, phase: phase(), settings, effectiveMagnitude: effMag(), secondsLeft: endsAt ? Math.max(0, Math.round((endsAt - Date.now()) / 1000)) : null, answersSeen, concepts, chosen, themes: recorded() ? [] : scene().themes, feelings: { session: total, lately: recent }, atmosphere: atmosphere(), journal: journal.slice(-12), lastError, calls: calls.slice(-20), elements: [...live.values()].map(e => ({ id: e.id, theme: e.theme, layer: e.layer, params: e.params, chars: e.code.length, desc: e.desc })) }),
+    status: () => ({ mode: mode(), model, question, phase: phase(), settings, effectiveMagnitude: effMag(), secondsLeft: endsAt ? Math.max(0, Math.round((endsAt - Date.now()) / 1000)) : null, answersSeen, concepts, chosen, themes: scene().themes, feelings: { session: total, lately: recent }, atmosphere: atmosphere(), journal: journal.slice(-12), lastError, calls: calls.slice(-20), elements: [...live.values()].map(e => ({ id: e.id, theme: e.theme, layer: e.layer, params: e.params, chars: e.code.length, desc: e.desc })) }),
     reset(fresh) { clear(); if (fresh) { try { fs.unlinkSync(cacheFile()); } catch {} } else loadOpening(); },
   };
 }

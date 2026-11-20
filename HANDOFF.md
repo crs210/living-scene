@@ -1,8 +1,9 @@
 # Living Scene: handoff
 
 This file is written for a new Claude chat (or person) picking the project up cold. It covers what
-the app is, how it works, how to run every part, what has and has not been tested, and what the
-owner wants next. `README.md` is the short version; this is the full one.
+the idea is, how to run a director in the background, what state the project is in, and what the
+owner wants next. Read `README.md` first: it is the reference for how the app works, its files,
+its settings and its limitations. This file does not repeat those.
 
 ## 1. What it is
 
@@ -32,7 +33,7 @@ about where AI is going?"), but any open question should work.
    to what it is: bare trees, boarded windows, graffiti; or blossom, lit windows, repairs.
 5. **Repeats grow by themselves.** Claude sorts each answer into a reusable theme. The app tallies
    themes and feeds each theme's share of the room to its elements as `p.w`. The same idea said six
-   times becomes big without Claude redrawing it. Weak themes shrink and are pruned.
+   times becomes big without Claude redrawing it. Themes the room drops shrink, fade and move aside.
 6. **The picture goes on a journey, then settles.** Phases: *upheaval* (early answers must rewrite
    opening landmarks), *building*, *settling* (few changes), *final* (one composed image, held).
    Driven by a session clock or by the host's buttons.
@@ -62,28 +63,13 @@ two pages:
 | Answer page | `http://localhost:3000/` | `public/index.html` | Audience phones (same Wi-Fi; QR code is on the display) |
 | Display | `http://localhost:3000/comic` | `public/comic.html`, `public/comic.js` | Projector / host |
 
-`/display` is an older hand-built procedural version, kept for reference only.
-
-### Files
-
-- `server.js`: HTTP, filtering, batching, Server-Sent Events. Host-only actions are limited to
-  localhost.
-- `src/director.js`: the core. The system prompt (drawing-kit documentation, the rules, the reply
-  format), themes and weights, pruning, feelings to atmosphere, phases, the three modes, saving.
-- `public/comic.js`: the renderer, the drawing kit `k`, the print finish, the atmosphere effects,
-  and the host controls. Compiles each element's code with `new Function('k','p','t','m', code)`.
-- `src/filter.js`: basic profanity and contact-detail filter on answers.
-- `tools/`: `director-wait.js` and `director-reply.js` (the manual director, below), `replay.js`
-  (scripted audiences: sets `ai`, `home`, `city`), `burst.js`, `examples.js`.
-- `sessions/` (ignored by git): every finished session is written here as JSON.
-- `.cache/` (ignored by git): drawn openings, keyed by question and chosen stage.
-- Older reference code: `public/display.js`, `public/tone.js`, `src/interpret.js`,
-  `src/concepts.js`, `src/world.js`, `src/comic-library.js`, `src/comic-base.js`. `server.js` still
-  runs the old lexicon interpreter alongside the director; the comic display ignores its output.
+The files are listed in `README.md`. The two to know: `src/prompt.js` is everything the model is
+told, and `src/director.js` is the state and plumbing around it.
 
 ### The scene and the reply format
 
-An element is `{ id, theme, layer, desc, code, params }`. `code` is the body of
+An element is `{ id, theme, layer, at, enter, desc, code, params }` (`at`: where it stands; `enter`:
+how it arrives: rise, drop, slide, grow or fade). `code` is the body of
 `function (k, p, t, m)`: `k` the drawing kit, `p` the eased params (plus `p.w`, the theme's share),
 `t` time in seconds, `m` the atmosphere. The canvas is a 1600 x 900 stage.
 
@@ -91,9 +77,9 @@ Claude replies with one JSON object:
 
 ```
 { "feelings": { hope, dread, ... 0..1 },
-  "ideas":   [{ "theme", "n", "gist" }],        // which theme each answer joined
+  "ideas":   [{ "theme", "n", "gist", "touches": ["id"] }],   // which theme each answer joined, and which elements it changes
   "set":     [{ "id", "params": [{name,value}] }],   // move numbers on existing elements
-  "add":     [{ "id", "theme", "layer", "desc", "code", "params": [{name,value}] }],
+  "add":     [{ "id", "theme", "layer", "at": [x,y], "enter", "desc", "code", "params": [{name,value}] }],
              // a new element, or a REWRITE if the id already exists
   "remove":  ["id"],
   "note":    "one sentence: what the picture now says" }
@@ -115,10 +101,8 @@ supply one:
 | Mode | How to start | Notes |
 |---|---|---|
 | **Test session** (default, no API key) | `node server.js` | Requests wait in a queue until something answers them. This is how all testing so far was done, on a Claude subscription. |
-| **API** | set `ANTHROPIC_API_KEY`, then `node server.js` | Fully automatic. A fast pass (feelings, themes, numbers, briefs) lands first, then one request per new drawing in parallel. `DIRECTOR_MODEL` picks the model (default `claude-sonnet-5-5`). Needs `npm i @anthropic-ai/sdk zod`. **Never run for real.** |
+| **API** | set `ANTHROPIC_API_KEY`, then `node server.js` | Fully automatic. A fast pass (feelings, themes, numbers, briefs) lands first, then one request per new drawing in parallel. `DIRECTOR_MODEL` reads the room and `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). Needs `npm i @anthropic-ai/sdk zod`. **Never run for real.** |
 | **Mock** | `DIRECTOR_MOCK=1` (PowerShell: `$env:DIRECTOR_MOCK=1; node server.js`) | Canned replies through the API code path. Tests the plumbing, not the pictures. |
-
-`DIRECTOR_RECORDED=1` gives a pre-written harbour driven by keywords; it is not Claude.
 
 **The owner does not want an API key used yet.** Test on the subscription.
 
@@ -172,39 +156,44 @@ a little cruder than Sonnet's. In API mode the equivalent is `DIRECTOR_MODEL` fo
 
 Step 3 and 4 are separate on purpose: a chained command once sent a stale reply as the final.
 
-## 5. What has been tested
+## 5. State of the project (set point v0.2, 2026-11-21)
 
-- Five live sessions with a stand-in director (four Sonnet, one Opus) across AI, home and city
-  questions. The pictures followed the answers and repeated themes dominated the final image.
-- Measured with Opus (clock time, request received to applied): opening 75-107 s, a batch with new
-  drawings 46-78 s, final 48 s, four opening options 21 s. Sonnet was estimated in the same range.
-  These include subagent overhead; the real API should be faster but that is unmeasured.
-- The automatic pipeline with mock replies: bursts merge into one batch, the fast pass lands in
-  about half a second, drawings follow in parallel, the session clock runs every phase.
+The code was reviewed and tidied into a set point to build from:
 
-Not tested: API mode with a real key; behaviour with a large real audience; frame rate and
-smoothness in a normal browser (the testing tool's browser pane throttles animation).
+- The older keyword-driven system (its display, interpreter and recorded demo) was removed; it is
+  kept under the git tag `before-tidy`. While it was still wired in, it was overriding three of the
+  director's atmosphere values (overall tint, line shake, wind) on the display every second. That
+  is fixed: the mood now comes only from the director, and people typing add a breeze.
+- The prompt text lives in `src/prompt.js`, separate from the logic in `src/director.js`.
+- `npm test` runs 32 checks of the plumbing in about 20 seconds with scripted replies. Run it after
+  every change. It cannot judge the pictures.
+- Git: `main` is the set point (tag `v0.2`). Branch from it for new work and commit at each working
+  milestone. `v0.1-baseline` is the first comic display; `sandboxed-renderer` is unverified.
 
-## 6. Known problems
+What has been tested, and how:
 
-- **Slow.** 45-80 seconds from an answer to its picture in test-session mode.
-- **Pruning is too eager.** A large element was removed after one quiet batch because its theme's
-  share fell to 10%.
-- **Elements are not edited later.** "Funny hats" was grouped under a general theme and no hats
-  were put on the people already in the scene. The prompt does not push hard enough to modify
-  existing elements in response to an answer that refers to them.
-- **New things land on top instead of joining in.** A data centre arrives as a big separate object
-  rather than being worked into what is there.
-- **Abstraction at maximum still feels restrained**, and barely affects openings.
-- **Themes fragment** with Sonnet (13 themes from 18 answers). Opus grouped better.
-- **Model-written code runs behind a word blocklist only.** A proper sandboxed renderer exists on
-  the `sandboxed-renderer` git branch but could not be verified. Not in this zip.
-- A fix made on 2026-11-21 (the app silently dropped drawings when the phase changed between
-  request and reply) passes a syntax check but has not been exercised live.
-- `README.md` says the session clock is untested; it has since been run with mock replies.
+- Six live sessions with stand-in directors (Sonnet, Opus, and a Sonnet reader with Haiku
+  cartoonists) on AI, home and city questions. The pictures followed the answers; "funny hats" put
+  hats on existing figures; "make them nice" redrew the data centres.
+- Timings (stand-ins, clock time): one worker 35-50 s per batch; Opus opening 75-107 s; reader
+  12-15 s, then 12-44 s per drawing.
+- The automatic pipeline with mock replies, and a 60-answer burst (two batches, nothing left queued).
 
-Git: `themes-and-concepts` is the working branch (this zip), `main` the early baseline,
-`sandboxed-renderer` the unverified experiment. Commit at each working milestone.
+Not tested: a real API key; a real audience; frame rate and the look of the entrances in an
+ordinary browser (the test tool's browser pane throttles animation).
+
+## 6. Limitations
+
+The full list is in `README.md` under Limitations. The ones that shape what to build next:
+
+- **Speed** is the model writing drawing code (the whole prompt is only about 3,600 tokens).
+- **A director must be running**, and on a subscription every waiting worker costs allowance. The
+  owner objected to idle workers using allowance: start one only when they are at the screen.
+- **Model-written code is not sandboxed.** Fine for a demo on the host's laptop; it must be solved
+  before the open-rooms idea is put in front of the public.
+- **One picture per app, all in memory.** The open-rooms idea needs several scenes, each with its
+  own director queue and event stream, and something that survives a restart.
+- **Sonnet fragments themes**, which weakens "repeats grow".
 
 ## 7. Next directions (from the owner, 2026-11-21)
 

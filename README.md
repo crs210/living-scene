@@ -3,65 +3,129 @@
 A live audience answers an open question on their phones. One comic-book panel on the projector
 changes as they answer, and settles into a single image of how the room replied.
 
+There is no image or video model. Claude writes the picture as small drawing programs against a
+fixed comic-style drawing kit, and the browser animates between states.
+
 ## Run it
 
 ```
-node server.js
+node server.js          # Node 20 or newer; nothing to install for the default mode
+npm test                # self-check: 32 checks of the plumbing, about 20 seconds, no model needed
 ```
 
-- Display (projector): http://localhost:3000/comic
-- Answers (phones): http://localhost:3000/ (QR code is on the display)
-- Keys on the display: `S` controls, `D` director panel, `C` scene code and themes, `P` save picture, `F` feed, `H` hide all, `R` reset
+- Display (projector, on the computer running the app): http://localhost:3000/comic
+- Answers (phones on the same network): the address and QR code shown on the display
+- `npm i` is only needed for the QR code (`qrcode`) and, in API mode, `@anthropic-ai/sdk` and `zod`.
+
+Display keys: `S` controls, `D` director panel, `C` scene code, `P` save picture, `F` feed,
+`H` hide everything but the picture, `R` reset, `1`-`4` send an example answer.
 
 ## How it works
 
-1. **The question drives the opening.** The host presses *Propose opening scenes* and Claude offers
-   four different stages (literal, metaphorical, surreal, nearly empty). The host picks one, or types
-   their own. Claude then draws it as 6 to 8 elements. The opening is a stage, not the answer.
-2. **Answers arrive in batches.** Anything sent while Claude is working goes together in the next request.
-3. **Claude returns four things per batch:**
-   - nine feelings (hope, dread, wonder, anger, grief, belonging, agency, unease, urgency)
-   - which theme each answer belongs to, reusing earlier themes for the same idea
-   - new numbers for existing elements, new elements as drawing code, and removals
-   - one sentence on what the picture now says
-4. **The app does the rest without Claude:**
-   - feelings become atmosphere: light, warmth, colour drain, rain, mist, wind, shaky lines, sparkle
-   - every element shows its own wear and bloom from that atmosphere
-   - each theme's share of the room is fed to its elements as `p.w`, so repeats grow by themselves
-   - weak themes are pruned when the scene is full
-5. **The session has phases.** Early answers are told to overturn the opening; the middle reinforces
-   what repeats; the last fifth converges; then one final image is composed and held.
+1. **The question drives the opening.** The host presses *Propose opening scenes*; the director
+   offers four stages (literal, metaphorical, surreal, nearly empty). The host picks one or types
+   their own, and it is drawn as 6 to 8 elements. The opening is a stage, not the answer.
+2. **Answers arrive in batches.** Everything received in a second goes together; anything arriving
+   while the director is busy waits for the next request. Nothing stale is queued.
+3. **The director replies with:** nine feelings; which theme each answer joins and which existing
+   elements it touches; new numbers for elements; new or rewritten elements as code; removals; one
+   sentence on what the picture now says.
+4. **The app does the rest:**
+   - feelings become atmosphere (light, warmth, rain, mist, wind, decay, bloom, tension), and every
+     element is written to show its own wear and flourishing from it;
+   - each theme's share of the room is fed to its elements as `p.w`, so repeats grow by themselves;
+   - themes the room stops voicing recede (smaller, fainter, moved aside); elements are deleted only
+     when the scene is over-full, and opening landmarks never;
+   - the pieces of a reply are revealed one at a time, each with its own entrance.
+5. **The session has phases:** upheaval (early answers must rewrite the opening), building,
+   settling, and one final composed image that is held and saved to `sessions/`.
+
+An element is `{ id, theme, layer, at, enter, desc, code, params }`. `code` is the body of
+`function (k, p, t, m)`: `k` the drawing kit, `p` its eased numbers, `t` seconds, `m` the atmosphere.
+
+## Who plays the director
+
+| Mode | How | Notes |
+|---|---|---|
+| Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. Either one worker does everything, or a reader (`--role read`) plus several cartoonists (`--role draw`). See `HANDOFF.md` for the worker briefs. |
+| API | `ANTHROPIC_API_KEY` set | Automatic: a fast pass (feelings, themes, numbers, briefs), then one request per drawing in parallel. `DIRECTOR_MODEL` reads the room, `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). **Never run with a real key.** |
+| Mock | `DIRECTOR_MOCK=1` | Canned replies through the API path. Tests plumbing only. |
+
+Other settings: `PORT`, `QUESTION`, `PUBLIC_URL` (address shown to phones), `STAGGER_MS` (gap between
+arriving pieces, default 3500), `CACHE_DIR`, `SESSIONS_DIR`.
 
 ## Controls (`S`)
 
-- **Abstraction**: literal to dreamlike. Changes the instructions Claude gets.
-- **Magnitude**: gentle to bold. Sets how many elements may change per batch and how hard tone shifts the look.
+- **Abstraction**: literal to dreamlike. Changes the instructions the director gets.
+- **Magnitude**: gentle to bold. How many elements may change per batch, and how hard mood shifts the look.
 - **Start session / Settle now / Final image**: the session clock and its manual overrides.
 - **Propose opening scenes / Use mine / New scene from question**.
 
-## Modes
-
-| Mode | When | What happens |
-|---|---|---|
-| Test session | no API key (default) | Requests queue; a Claude Code session answers them with `tools/director-wait.js` and `tools/director-reply.js`. Tests quality, not speed. |
-| API | `ANTHROPIC_API_KEY` set | Automatic. A fast pass (feelings, themes, numbers) lands first; drawings follow in parallel. Model from `DIRECTOR_MODEL`, default `claude-sonnet-5-5`. **Not yet run.** |
-| Recorded demo | `DIRECTOR_RECORDED=1` | A pre-written harbour driven by a keyword matcher. Not Claude. |
-
-## Testing
-
-- `node tools/replay.js ai 1` sends a scripted batch (sets: `ai`, `home`, `city`). The answers cover
-  the kinds of thing people say: named things, bare feelings, opinions, questions, memories,
-  contradictions, predictions, processes and repeats.
-- `GET /api/settings` shows phase, themes and weights, feelings, atmosphere, the journey and every element.
+The controls work only at `localhost` on the computer running the app.
 
 ## Files
 
-- `src/director.js`: the prompt, themes, atmosphere, phases, API and test-session modes
-- `public/comic.js`: the renderer and drawing kit (the fixed comic style)
-- `server.js`: answers in, filtering, scene out
-- `public/display.js` and `src/comic-library.js`: the earlier hand-built versions, kept for reference
+| File | What it holds |
+|---|---|
+| `server.js` | Answers in, filtering, batching, the scene out, the director's queue |
+| `src/prompt.js` | Everything the director model is told. Edit here to change how the picture is directed |
+| `src/director.js` | State and plumbing: themes, weights, receding, atmosphere, phases, staggered reveal, the three modes, the work log |
+| `src/filter.js` | Basic word and contact-detail filter on answers |
+| `public/comic.js`, `comic.html` | The display: drawing kit, renderer, print finish, host controls, director and code panels |
+| `public/index.html`, `tone.js` | The answer page |
+| `tools/selfcheck.js` | `npm test` |
+| `tools/director-wait.js`, `director-reply.js` | The test-session director's two steps |
+| `tools/replay.js`, `burst.js` | Scripted audiences (`ai`, `home`, `city`) and a many-answers-at-once test |
 
-## Known limits
+`.cache/` holds drawn openings and `sessions/` finished sessions; neither is in git.
 
-- Scene code written by the model is run in the display page behind a word blocklist, not a real sandbox.
-- API mode, the session clock and bursts of many answers have not been tested end to end.
+## Testing
+
+- `npm test` after any change. It checks batching, themes, staggered reveal, receding, the
+  reader/cartoonist split, abandoned waits and the final image, with scripted replies.
+- `node tools/replay.js ai 1` sends a scripted batch to a running app.
+- `GET /api/settings` shows phase, themes and weights, feelings, atmosphere, the journey and every element.
+- Whether the pictures are any good can only be judged by running a director and looking.
+
+## Limitations
+
+**Speed**
+- One Sonnet worker takes 35 to 50 seconds from a batch of answers to its picture.
+- Reader plus cartoonists: answers are read in 12 to 15 seconds; each drawing then takes 12 to 44.
+- These are Claude Code stand-in timings. Real API speed has never been measured.
+
+**It needs a director, and that costs something**
+- Without an API key nothing happens until a Claude Code worker answers the queue, and every
+  worker uses subscription allowance, including while it waits. Start workers only when someone is
+  at the screen, prefer one, and give it a short idle limit.
+- The API path is exercised only by mock replies.
+
+**Safety**
+- Model-written code runs in the display page behind a word blocklist, not a sandbox, and audience
+  text steers what the model writes. Acceptable on a host's own laptop; not for an untrusted
+  public deployment. A sandboxed renderer exists on the `sandboxed-renderer` branch, unverified.
+- An element that throws is switched off after four errors. One that loops for a very long time
+  or draws far too much would stall the display; there is no time limit on an element.
+- The answer filter is a short English word list. The two-second limit per phone relies on an id
+  the phone supplies, so it stops accidents, not abuse.
+
+**Scale and state**
+- One question and one picture per running app. Several rooms at once are not supported.
+- Everything is in memory: restarting the app loses the session in progress.
+- Tested with a 150-answer burst and a handful of displays, never with a real audience.
+- Phones must be able to reach the computer: same network, no client isolation, or set `PUBLIC_URL`.
+- The display's lettering comes from Google Fonts and falls back to system fonts offline.
+
+**Picture quality**
+- Sonnet tends to give each answer its own theme, so repetition counts for less than it should.
+  Opus grouped better. Haiku draws acceptably but more crudely.
+- The abstraction slider has little effect on openings.
+- At most 14 arrived elements, 6,000 characters of code each; the final image may rewrite three.
+- Frame rate and the look of the entrances have not been checked by eye in an ordinary browser.
+
+## Versions
+
+- `v0.2` (branch `main`): this set point.
+- `v0.1-baseline`: the first comic display. `before-tidy`: the state just before the clean-up,
+  including the older keyword-driven display that was removed.
+- `sandboxed-renderer`: unverified experiment.

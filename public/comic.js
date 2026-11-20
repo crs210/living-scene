@@ -1,6 +1,6 @@
 // Comic renderer. It knows nothing about the scene: every visible thing is an ELEMENT
 // that arrives from the server as { id, layer, code, params }, where `code` is the body of
-// a draw function (k, p, t, m) written by the director (Claude, or the recorded stand-in).
+// a draw function (k, p, t, m) written by the director model.
 //   k = the drawing kit below (inked, wobbly, flat-colour primitives)
 //   p = that element's own numbers, eased toward their latest targets  <- this is the morph
 //   t = seconds, m = shared mood { val, tension, wind }
@@ -215,17 +215,17 @@ function applyScene(scene) {
   if (scene.m) Object.assign(moodT, scene.m);
   themesNow = scene.themes || []; if (JSON.stringify(scene.concepts || []) !== JSON.stringify(conceptsNow) || scene.chosen !== chosenNow) { conceptsNow = scene.concepts || []; chosenNow = scene.chosen; renderConcepts(); }
   if (scene.settings && !slidersTouched) for (const key of ['abstraction', 'magnitude']) { const inp = document.getElementById(key); if (inp) inp.value = scene.settings[key]; }
-  document.getElementById('keys').textContent = (scene.mode.startsWith('recorded') ? 'DEMO SCENE: pre-written, not Claude reading answers' : 'Scene written by ' + scene.mode) + '  ·  S controls · D director · C scene code · P save picture · F feed · H hide all · R reset';
+  document.getElementById('keys').textContent = 'Scene written by ' + scene.mode + '  ·  S controls · D director · C scene code · P save picture · F feed · H hide all · R reset';
   const seen = new Set();
   for (const e of scene.els) {
     seen.add(e.id);
     let el = els.get(e.id);
     if (!el || el.code !== e.code) {
       let fn = null, err = null; try { fn = compile(e.code); } catch (x) { err = String(x.message); console.warn('element', e.id, err); }
-      const cur = el ? el.cur : Object.fromEntries(Object.keys(e.params).map(key => [key, e.base ? e.params[key] : 0]));
+      const cur = el ? el.cur : Object.fromEntries(Object.keys(e.params).map(key => [key, 0]));
       // a rewritten element keeps drawing its old self underneath while the new one inks in over it
       const old = el && el.fn && el.errors <= 3 && el.grow > 0.5 && fn ? el.fn : null;
-      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : (e.base ? 1 : 0), rec: el ? el.rec : 0, old, mix: old ? 0 : 1 };
+      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : 0, rec: el ? el.rec : 0, old, mix: old ? 0 : 1 };
       els.set(e.id, el);
     }
     el.tgt = e.params; el.layer = e.layer; el.gone = false; el.at = e.at || null; el.enter = e.enter || 'fade'; el.recT = e.recede || 0;
@@ -388,7 +388,9 @@ const es = new EventSource('/events');
 es.addEventListener('state', msg => {
   const s = JSON.parse(msg.data);
   if (s.scene) applyScene(s.scene);
-  moodT.val = s.t.val; moodT.tension = s.t.tension; moodT.wind = s.t.wind;
+  // People typing right now put a breeze through the picture. Everything else about the mood is the director's.
+  const stir = s.typing && s.typing.n ? Math.min(1, s.typing.n / 4) * (0.5 + 0.5 * s.typing.energy) : 0;
+  if (s.scene && s.scene.m) moodT.wind = Math.min(1, (s.scene.m.wind || 0) + 0.3 * stir);
   const have = new Set([...feedEl.children].map(c => +c.dataset.id)), want = new Set(s.feed.map(f => f.id));
   for (const c of [...feedEl.children]) if (!want.has(+c.dataset.id)) c.remove();
   for (const f of s.feed.slice(0, 9).reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.textContent = f.text; feedEl.prepend(d); }

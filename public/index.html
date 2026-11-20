@@ -28,7 +28,7 @@
   <textarea id="t" maxlength="240" placeholder="A sentence or two. Mixed feelings welcome." aria-label="Your answer"></textarea>
   <div class="row"><span id="count">0 / 240</span><button id="send" disabled>Send</button></div>
   <div id="msg" role="status"></div>
-  <label><input type="checkbox" id="tone" checked><span>Let the scene stir while I type. Only a mood number is sent, worked out on this phone. Your words stay here until you press Send, and answers are shown without names.</span></label>
+  <label><input type="checkbox" id="tone" checked><span>Let the picture stir while I type. Only a number for how lively the typing is gets sent, worked out on this phone. Your words stay here until you press Send, and answers are shown without names.</span></label>
 </main>
 <script type="module">
 import { toneOf } from './tone.js';
@@ -50,7 +50,7 @@ async function go() {
   try {
     const r = await (await fetch('/api/submit', { method: 'POST', body: JSON.stringify({ cid, text: t.value }) })).json();
     msg.className = r.ok ? '' : 'bad';
-    if (r.ok) { t.value = ''; $('count').textContent = '0 / 240'; msg.textContent = 'Sent. Look up: a light is carrying it into the scene. Add another whenever you like.'; }
+    if (r.ok) { t.value = ''; $('count').textContent = '0 / 240'; msg.textContent = 'Sent. Look up: it turns green in the list once it has been drawn into the picture. Add another whenever you like.'; }
     else { msg.textContent = r.reason; send.disabled = false; }
   } catch { msg.className = 'bad'; msg.textContent = 'Could not reach the room. Try again.'; send.disabled = false; }
 }
