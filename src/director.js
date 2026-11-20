@@ -60,6 +60,7 @@ ${KIT_DOC}
 
 THE STATE-OF-REPAIR RULE
 Every element carries its own response to the atmosphere, in a way native to the thing and the setting. As m.decay rises it wears (broken, boarded, cracked, bare, toppled, overgrown, scrawled-on, dimmed); as m.bloom rises it thrives (mended, lit, painted, leafed, flowering, busy). m.storm and m.wind bend what can bend; m.bond gathers figures.
+This applies to elements you add later as much as to the opening. Start every element with "var d = m.decay, b = m.bloom;" and make BOTH change what is drawn, not just its colour: one thing that appears or breaks as d rises, one that appears or mends as b rises.
 
 THE NINE FEELINGS
 ${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
@@ -125,7 +126,8 @@ export function createDirector({ question: q0 }) {
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiter = null, inFlight = 0;
 
   const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';
-  const hasKey = () => !!process.env.ANTHROPIC_API_KEY;
+  const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
+  const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
   const recorded = () => !hasKey() && !!process.env.DIRECTOR_RECORDED;
   const sessionMode = () => !hasKey() && !recorded();
   const mode = () => recorded() ? 'recorded demo' : (hasKey() ? 'Claude (' + model + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
@@ -255,7 +257,20 @@ export function createDirector({ question: q0 }) {
   }
 
   // ---- API mode: a fast pass (feelings, themes, numbers) lands first; drawings follow in parallel ----
+  // Canned replies with realistic delays, to test batching and the fast-then-draw pipeline without a key.
+  async function mock(kind, answers = [], extra) {
+    const t0 = performance.now(), wait = ms => new Promise(r => setTimeout(r, ms)), n = calls.length;
+    const blob = (id, theme, x) => ({ id, theme, layer: 5, desc: 'mock ' + id, code: "var d = m.decay, b = m.bloom; k.blob(" + x + ", 520, 40 + 160 * (p.w || 1), 40 + 120 * (p.w || 1), k.mix('#57c7c2', '#6f6a80', d), { lw: 5 }); if (b > 0.3) k.sparkle(" + x + ", 380, 20);", params: [] });
+    let out;
+    if (kind === 'concepts') { await wait(400); out = { concepts: [{ title: 'Mock stage', pitch: 'A flat field.', room: 'Anything.' }] }; }
+    else if (kind === 'open') { await wait(1500); out = { add: [{ id: 'sky', layer: 0, desc: 'mock sky', code: "k.rect(0, 0, 1600, 900, k.mix('#27364f', '#7fb7c9', m.light), { lw: 0 });", params: [] }, { id: 'ground', layer: 1, desc: 'mock ground', code: "k.rect(0, 600, 1600, 300, '#6fa35a', { lw: 4 });", params: [] }], note: 'mock opening' }; }
+    else if (kind === 'draw') { await wait(1800 + Math.random() * 800); out = { add: [blob(extra.id, extra.theme, 200 + (n * 170) % 1200)] }; }
+    else { await wait(kind === 'fast' ? 500 : 900); const theme = 'theme-' + (answers.length % 3); out = { feelings: { ...zero(), hope: 0.4, unease: 0.3 }, ideas: [{ theme, n: answers.length || 1, gist: 'mock idea' }], set: [], add: [], draw: kind === 'fast' ? [{ id: 'm' + n, theme, layer: 5, brief: 'a blob' }, { id: 'n' + n, theme: 'theme-x', layer: 5, brief: 'another' }] : [], remove: [], note: 'mock note ' + n }; }
+    calls.push({ kind, answers: answers.length, ms: Math.round(performance.now() - t0), mock: true });
+    return out;
+  }
   async function ask(kind, answers, extra) {
+    if (MOCK) return mock(kind, answers, extra);
     if (!client) {
       const { default: Anthropic } = await import('@anthropic-ai/sdk');
       const { z } = await import('zod'); const { zodOutputFormat } = await import('@anthropic-ai/sdk/helpers/zod');

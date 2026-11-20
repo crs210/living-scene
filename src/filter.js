@@ -32,7 +32,9 @@ export function filterSubmission(raw) {
   for (const t of joined) {
     for (const part of t.split(/[-_/.,]+/).concat(t)) {
       const n = norm(part), s = squeeze(n);
-      if (EXACT.has(n) || EXACT.has(s) || INCLUDES.some(b => n.includes(b) || s.includes(squeeze(b)))) {
+      // Stretched spellings ("shiiit") are caught on the squeezed token, but only for stems that have no
+      // doubled letter of their own: squeezing "nigg" to "nig" was rejecting every answer containing "night".
+      if (EXACT.has(n) || EXACT.has(s) || /n+i+g{2,}/.test(n) || INCLUDES.some(b => n.includes(b) || (squeeze(b) === b && s.includes(b)))) {
         return { ok: false, reason: 'Please rephrase that for a mixed audience.' };
       }
     }
