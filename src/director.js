@@ -73,7 +73,7 @@ ${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
 Report how strongly each is present in the batch, 0..1. They are not opposites; a room can hold several at once.
 
 THEMES (how repetition works)
-Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves.
+Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
 
 TURNING THOUGHTS INTO PICTURES
 The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN to this place for a stranger to feel that? Then draw the event, big.
@@ -148,7 +148,7 @@ export function createDirector({ question: q0 }) {
     return settleNow ? 'settling' : answersSeen < 10 ? 'upheaval' : 'building';
   }
   const effMag = () => clamp(settings.magnitude * ({ upheaval: 1.35, building: 1, settling: 0.5, final: 0.3 })[phase()]);
-  const maxAdd = () => phase() === 'settling' ? 1 : Math.round(1 + effMag() * 3);
+  const maxAdd = (n = 0) => phase() === 'settling' ? 1 : Math.min(5, Math.round(1 + effMag() * 3) + (n >= 8 ? 1 : 0));   // a big batch earns one more
 
   // ---- themes: repetition is what makes something big ----
   function weights() {
@@ -219,8 +219,10 @@ export function createDirector({ question: q0 }) {
     const story = journal.slice(-6).map((j, i) => `${i + 1}. ${j.note}`).join('\n') || '(nothing yet)';
     const head = `The question on screen is:\n"${question}"\n\nThe journey so far (${answersSeen} answers):\n${story}\nFeelings across the session: ${top(total)}\nFeelings lately: ${top(recent)}\n\nThemes so far:\n${th}\n\nElements in the scene now:\n${els}\n\n`;
     if (kind === 'final') return { system: SYSTEM, user: head + `${abs}\n\nThe session has ended. Compose the FINAL IMAGE.` };
-    const n = maxAdd(), ph = phase();
-    const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply; move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.`;
+    const n = maxAdd(answers.length), ph = phase();
+    const pictured = new Set([...live.values()].map(e => e.theme).filter(Boolean));
+    const owed = [...themes].filter(([k2, t]) => !pictured.has(k2) && t.count >= 2).sort((a, b) => b[1].count - a[1].count).map(([k2, t]) => `${k2} (${t.count})`).join(', ');
+    const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply; move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.${owed ? `\nOWED A PICTURE: these themes have been voiced more than once and still have no element: ${owed}. Draw them before anything voiced only once.` : ''}`;
     const list = `New answers in this batch (${answers.length}):\n${answers.map(a => `- ${a}`).join('\n')}`;
     if (kind === 'fast') return { system: SYSTEM, user: head + controls + '\n\n' + list + '\n\nFAST PASS: write no code and leave "add" empty. For each new or rewritten element you want, add a brief to a "draw" list: { "id", "theme", "layer", "brief" } where brief says what it is, where, how big, and what its numbers mean.' };
     if (kind === 'draw') return { system: SYSTEM, user: head + controls + '\n\n' + list + `\n\nDRAW PASS: write exactly ONE element, returned alone in "add", for this brief:\n${JSON.stringify(extra)}\nLeave every other list empty and all feelings 0.` };
@@ -240,7 +242,7 @@ export function createDirector({ question: q0 }) {
         t.count += Math.max(1, Math.min(n, Number(i.n) || 1)); t.last = batchNo; themes.set(key, t);
       }
     }
-    const cap = isOpening ? 12 : final ? 3 : partial ? 1 : maxAdd();
+    const cap = isOpening ? 12 : final ? 3 : partial ? 1 : maxAdd(n);
     for (const a of (patch.add || []).slice(0, cap)) {
       if (!a || typeof a.code !== 'string' || !a.id || a.code.length > 6000) { out.rejected.push(a?.id || '?'); continue; }
       const prev = live.get(a.id), key = a.theme ? String(a.theme).toLowerCase().trim().replace(/\s+/g, '-') : (prev?.theme ?? null);
@@ -321,7 +323,7 @@ export function createDirector({ question: q0 }) {
           const batch = queue.splice(0);
           const fast = await ask('fast', batch); if (!fast) continue;
           apply({ ...fast, add: [] }, { answers: batch.length }); done();
-          await Promise.all((fast.draw || []).slice(0, maxAdd()).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]] }, { partial: true }); done(); } })));
+          await Promise.all((fast.draw || []).slice(0, maxAdd(batch.length)).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]] }, { partial: true }); done(); } })));
         } else if (wantFinal) { wantFinal = false; const p = await ask('final'); if (p) { apply(p, { final: true }); done(); } }
         else queue.length = 0;
       }
