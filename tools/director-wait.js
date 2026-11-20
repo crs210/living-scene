@@ -11,7 +11,11 @@ const save = opt('--save'), sys = opt('--system'), role = opt('--role') || 'all'
 const skip = new Set(['--save', '--system', '--role'].map(n => args.indexOf(n) + 1).filter(i => i > 0));
 const nums = args.filter((a, i) => /^\d+$/.test(a) && !skip.has(i)).map(Number), wait = nums[0] ?? 540, port = nums[1] ?? 3000;
 try {
-  const r = await (await fetch(`http://localhost:${port}/api/director/next?wait=${wait}&role=${role}`)).json();
+  // Node's fetch gives up on a response after 300 s, so a long wait is made of shorter requests.
+  let r = { kind: 'idle' };
+  for (const end = Date.now() + wait * 1000; r.kind === 'idle' && Date.now() < end;) {
+    r = await (await fetch(`http://localhost:${port}/api/director/next?wait=${Math.max(1, Math.min(200, Math.round((end - Date.now()) / 1000)))}&role=${role}`)).json();
+  }
   if (r.kind === 'idle') console.log('IDLE: nothing to do yet.');
   else if (r.kind === 'none') console.log('NONE: ' + r.reason);
   else {
