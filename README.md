@@ -104,8 +104,9 @@ The controls work only at `localhost` on the computer running the app.
 - Model-written code runs in the display page behind a word blocklist, not a sandbox, and audience
   text steers what the model writes. Acceptable on a host's own laptop; not for an untrusted
   public deployment. A sandboxed renderer exists on the `sandboxed-renderer` branch, unverified.
-- An element that throws is switched off after four errors. One that loops for a very long time
-  or draws far too much would stall the display; there is no time limit on an element.
+- An element that throws is switched off after four errors, and one that is too slow to draw
+  (three frames over 150 ms, or about two seconds averaging over 8 ms) is switched off too. A single
+  call cannot be interrupted, so code that never returns would still freeze the display.
 - The answer filter is a short English word list. The two-second limit per phone relies on an id
   the phone supplies, so it stops accidents, not abuse.
 

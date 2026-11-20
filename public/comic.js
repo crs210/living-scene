@@ -284,7 +284,14 @@ function frame(now) {
       if (el.mix >= 1) el.old = null;
     }
     g.globalAlpha = alpha * (el.mix * el.mix * (3 - 2 * el.mix));
+    const c0 = performance.now();
     try { el.fn(k, el.cur, t, mood); } catch (x) { if (++el.errors > 3) console.warn('element disabled:', id, x.message); }
+    // Guard: a drawing that keeps taking too long would stall the whole picture, so it is switched off.
+    // Three very slow frames (over 150 ms), or about two seconds averaging over 8 ms, is enough.
+    const cost = performance.now() - c0; el.cost = (el.cost || 0) * 0.9 + cost * 0.1;
+    if (cost > 150) el.spikes = (el.spikes || 0) + 1;
+    el.slow = el.cost > 8 ? (el.slow || 0) + 1 : Math.max(0, (el.slow || 0) - 1);
+    if (el.spikes >= 3 || el.slow > 120) { el.errors = 99; el.tooSlow = true; console.warn('element switched off for being too slow:', id, Math.round(el.cost) + ' ms a frame'); }
     g.restore();
   }
   atmosphere(t);
@@ -380,7 +387,7 @@ function renderCodePanel() {
   if (themesNow.length) add('div', 'el', 'themes  ' + themesNow.map(th => `${th.key} x${th.count} (w ${th.w})`).join('   '));
   add('div', 'el', `quality scaler ${Q.toFixed(2)}`);
   add('div', 'el', 'atmosphere  ' + Object.entries(moodT).filter(e => Math.abs(e[1]) > 0.02).map(([a, b]) => `${a} ${(+b).toFixed(2)}`).join('  '));
-  for (const [id, el] of order) add('div', id === latestId ? 'new' : 'el', `${id === latestId ? '▶ ' : '  '}${id}${el.theme ? ' [' + el.theme + ']' : ''}  ${JSON.stringify(Object.fromEntries(Object.entries(el.tgt).map(([a, b]) => [a, +(+b).toFixed(2)])))}`);
+  for (const [id, el] of order) add('div', id === latestId ? 'new' : 'el', `${id === latestId ? '▶ ' : '  '}${id}${el.theme ? ' [' + el.theme + ']' : ''}${el.tooSlow ? ' (SWITCHED OFF: too slow)' : el.errors > 3 ? ' (SWITCHED OFF: errors)' : ''}  ${(el.cost || 0).toFixed(1)} ms  ${JSON.stringify(Object.fromEntries(Object.entries(el.tgt).map(([a, b]) => [a, +(+b).toFixed(2)])))}`);
   const el = els.get(latestId);
   if (el) { add('h3', '', '').style.marginTop = '2vh'; add('h3', '', `Latest element written: "${latestId}"`); add('div', 'el', el.desc || ''); add('div', '', '\n' + el.code.trim()); }
 }
@@ -434,5 +441,5 @@ addEventListener('keydown', e => {
 });
 const qs = new URLSearchParams(location.search);
 for (const c of ['bare', 'nofeed', 'code', 'dev']) if (qs.has(c)) document.body.classList.add(c);
-window.comicDiag = () => ({ fps: Math.round(fps), Q: +Q.toFixed(2), phase, themes: themesNow.map(th => th.key + ':' + th.count), els: order.map(([id, el]) => [id, el.errors]), mode: sceneMode });
+window.comicDiag = () => ({ fps: Math.round(fps), Q: +Q.toFixed(2), phase, themes: themesNow.map(th => th.key + ':' + th.count), els: order.map(([id, el]) => [id, el.errors]), slow: order.filter(e => e[1].tooSlow).map(e => e[0]), cost: Object.fromEntries(order.map(([id, el]) => [id, +(el.cost || 0).toFixed(2)])), mode: sceneMode });
 requestAnimationFrame(frame);
