@@ -138,6 +138,13 @@ export function createDirector({ question: q0 }) {
   let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, ghosts = [], revealClock = 0;
   const GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
   const ENTER = ['rise', 'drop', 'slide', 'grow', 'fade'];
+  let jobs = [], jobSeq = 0;
+  // One entry per request to the director: what went in, how long it took, what came back.
+  const begin = (kind, answers = [], p = null, brief = null) => {
+    const last = jobs.at(-1); if (last && !last.doneAt && last.kind === kind && kind !== 'draw' && last.answers.length === answers.length) return last;   // the same request, asked for again
+    const j = { n: ++jobSeq, kind, answers: [...answers], sentAt: Date.now(), promptChars: p ? p.system.length + p.user.length : 0, requestChars: p ? p.user.length : 0, brief: brief || null };
+    jobs.push(j); if (jobs.length > 14) jobs.shift(); return j;
+  };
   const nextReveal = () => (revealClock = Math.max(Date.now() + 1200, revealClock + GAP));
   const zero = () => Object.fromEntries(F.map(f => [f, 0]));
   let recent = zero(), total = zero(), weight = 0;
@@ -218,7 +225,7 @@ export function createDirector({ question: q0 }) {
         const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
         return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
       });
-      return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
+      return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), jobs: jobs.slice(-8) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
         themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
     }
     const els = BASE.map(e => ({ ...e, base: true, params: { ...e.params } }));
@@ -252,9 +259,10 @@ export function createDirector({ question: q0 }) {
   }
 
   function apply(patch, { opening: isOpening = false, final = false, answers = 0, partial = false } = {}) {
-    if (Array.isArray(patch.concepts)) { concepts = patch.concepts.slice(0, 5).map(c => ({ title: String(c.title || '').slice(0, 60), pitch: String(c.pitch || '').slice(0, 300), room: String(c.room || '').slice(0, 300) })); return { concepts: concepts.length }; }
+    const job = jobs.includes(patch._job) ? patch._job : jobs.findLast(j => !j.doneAt && j.kind !== 'draw') || begin(isOpening ? 'open' : final ? 'final' : 'manual');
+    if (Array.isArray(patch.concepts)) { Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, note: patch.concepts.length + ' opening options' }); concepts = patch.concepts.slice(0, 5).map(c => ({ title: String(c.title || '').slice(0, 60), pitch: String(c.pitch || '').slice(0, 300), room: String(c.room || '').slice(0, 300) })); return { concepts: concepts.length }; }
     const obj = list => Array.isArray(list) ? Object.fromEntries(list.map(({ name, value }) => [String(name), Number(value) || 0])) : { ...(list || {}) };
-    const out = { added: [], set: [], removed: [], pruned: [], rejected: [] };
+    const out = { added: [], set: [], removed: [], pruned: [], rejected: [] }, rewritten = new Set();
     const n = answers || inFlight || 1;
     if (!isOpening && !partial) {
       batchNo++;
@@ -279,7 +287,7 @@ export function createDirector({ question: q0 }) {
         if (prev) { const { was, revealAt, ...seen } = prev; el.was = revealAt > Date.now() ? was : seen; }
       }
       live.set(a.id, el);
-      latest = a.id; out.added.push(a.id);
+      latest = a.id; out.added.push(a.id); if (prev) rewritten.add(a.id);
     }
     for (const s of patch.set || []) { const e = live.get(s.id); if (e) { const { w, ...ps } = obj(s.params); Object.assign(e.params, ps); out.set.push(s.id); } else out.rejected.push(s.id); }
     for (const id of patch.remove || []) { const e = live.get(id); if (!e) continue; live.delete(id); out.removed.push(id); if (!isOpening && !final) { const { was, revealAt, ...seen } = e; const old = revealAt > Date.now() ? was : seen; if (old) ghosts.push({ el: old, until: nextReveal() }); } }
@@ -299,6 +307,10 @@ export function createDirector({ question: q0 }) {
       out.pruned = prune();
     }
     if (!partial) inFlight = 0;
+    const pieces = out.added.map(id => { const e = live.get(id); return { id, what: rewritten.has(id) ? 'rewrite' : 'new', theme: e.theme, enter: e.enter, chars: e.code.length, desc: e.desc.slice(0, 160), revealAt: e.revealAt || 0 }; });
+    for (const g of ghosts) if (out.removed.includes(g.el.id) || out.pruned.includes(g.el.id)) pieces.push({ id: g.el.id, what: out.pruned.includes(g.el.id) ? 'pruned' : 'remove', revealAt: g.until });
+    Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, feelings: patch.feelings ? top(patch.feelings) : '', ideas: (patch.ideas || []).slice(0, 12).map(i => ({ theme: String(i.theme || ''), n: Number(i.n) || 1, gist: String(i.gist || '').slice(0, 60), touches: Array.isArray(i.touches) ? i.touches.slice(0, 6).map(String) : [] })),
+      set: out.set, briefs: (patch.draw || []).map(d => String(d.id)), pieces, rejected: out.rejected, note: String(patch.note || '').slice(0, 300) });
     return out;
   }
 
@@ -316,7 +328,7 @@ export function createDirector({ question: q0 }) {
     return out;
   }
   async function ask(kind, answers, extra) {
-    if (MOCK) return mock(kind, answers, extra);
+    if (MOCK) { const job = begin(kind, answers || [], prompt(kind, answers, extra), extra?.brief); const out = await mock(kind, answers, extra); if (out) out._job = job; return out; }
     if (!client) {
       const { default: Anthropic } = await import('@anthropic-ai/sdk');
       const { z } = await import('zod'); const { zodOutputFormat } = await import('@anthropic-ai/sdk/helpers/zod');
@@ -334,7 +346,7 @@ export function createDirector({ question: q0 }) {
       };
       client = new Anthropic();
     }
-    const { system, user } = prompt(kind, answers, extra), t0 = performance.now();
+    const { system, user } = prompt(kind, answers, extra), t0 = performance.now(), job = begin(kind, answers || [], { system, user }, extra?.brief);
     const res = await client.messages.parse({
       model, max_tokens: kind === 'open' ? 24000 : kind === 'fast' || kind === 'concepts' ? 3000 : 10000,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],     // identical on every call, so it caches
@@ -342,7 +354,8 @@ export function createDirector({ question: q0 }) {
       messages: [{ role: 'user', content: user }],
     });
     calls.push({ kind, answers: answers?.length ?? 0, ms: Math.round(performance.now() - t0), out: res.usage?.output_tokens, cached: res.usage?.cache_read_input_tokens });
-    if (res.stop_reason === 'refusal') { lastError = 'the model declined this request'; return null; }
+    if (res.stop_reason === 'refusal') { lastError = 'the model declined this request'; Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, note: 'the model declined this request' }); return null; }
+    if (res.parsed_output) res.parsed_output._job = job;
     return res.parsed_output;
   }
   const guard = async (label, fn) => { try { await fn(); } catch (e) { lastError = `${label}: ${String(e.message || e).slice(0, 260)}`; console.error('director', lastError); } };
@@ -361,7 +374,7 @@ export function createDirector({ question: q0 }) {
           const batch = queue.splice(0);
           const fast = await ask('fast', batch); if (!fast) continue;
           apply({ ...fast, add: [] }, { answers: batch.length }); done();
-          await Promise.all((fast.draw || []).slice(0, maxAdd(batch.length)).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]] }, { partial: true }); done(); } })));
+          await Promise.all((fast.draw || []).slice(0, maxAdd(batch.length)).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]], _job: r._job }, { partial: true }); done(); } })));
         } else if (wantFinal) { wantFinal = false; const p = await ask('final'); if (p) { apply(p, { final: true }); done(); } }
         else queue.length = 0;
       }
@@ -376,18 +389,19 @@ export function createDirector({ question: q0 }) {
     pump(done);
   }
   // session mode: hand the next piece of work to whoever is acting as director
+  const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' ? { answers } : {}), ...p }; };
   async function next(waitMs) {
     if (!sessionMode()) return { kind: 'none', reason: 'not in session mode' };
-    if (wantConcepts) { wantConcepts = false; return { kind: 'concepts', ...prompt('concepts') }; }
-    if (!live.size) return { kind: 'open', ...prompt('open') };
+    if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
+    if (!live.size) return issue('open');
     if (!queue.length && !wantFinal) await new Promise(r => { waiter = r; setTimeout(r, waitMs); });
-    if (wantConcepts) { wantConcepts = false; return { kind: 'concepts', ...prompt('concepts') }; }
-    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); return { kind: 'patch', answers, ...prompt('patch', answers) }; }
-    if (wantFinal) { wantFinal = false; return { kind: 'final', ...prompt('final') }; }
+    if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
+    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); return issue('patch', answers); }
+    if (wantFinal) { wantFinal = false; return issue('final'); }
     return { kind: 'idle' };
   }
 
-  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
     tick(done) { if (endsAt && !isFinal && Date.now() > endsAt) { endsAt = 0; settleNow = true; wantFinal = true; sessionMode() ? wake() : pump(done); } },

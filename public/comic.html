@@ -27,6 +27,11 @@
   body.code #code { display: block; } body.code #feed { display: none; }
   #code h3 { font: 700 1.6vh system-ui, sans-serif; color: #f6c544; margin: 0 0 .6vh; }
   #code .el { color: #9aa3b5; } #code .new { color: #57c7c2; }
+  #dev { top: 0; left: 0; bottom: 0; width: 40vw; background: rgba(21,17,28,.93); color: #e8e2d0; font: 1.3vh/1.45 ui-monospace, Consolas, monospace; padding: 2vh; overflow: auto; display: none; }
+  body.dev #dev { display: block; } body.dev #q, body.dev #join { opacity: 0; }
+  #dev h3 { font: 700 1.5vh system-ui, sans-serif; color: #f6c544; margin: 1.6vh 0 .5vh; letter-spacing: .04em; } #dev h3:first-child { margin-top: 0; }
+  #dev .dim { color: #9aa3b5; } #dev .hot { color: #57c7c2; } #dev .bad { color: #ff8a7a; } #dev .ans { color: #e8e2d0; padding-left: 1.4vh; }
+  #dev .job { border-left: .3vh solid #4a4560; padding: .2vh 0 .2vh 1vh; margin: 0 0 1vh; } #dev .job.live { border-color: #f6c544; }
   #controls { left: 50%; bottom: 4.5vh; transform: translateX(-50%); background: #fbf6e9; border: .45vh solid #15111c; box-shadow: .6vh .6vh 0 #15111c; padding: 1.4vh 2vh; display: none; font-size: 1.7vh; width: min(92vw, 120vh); }
   body.controls #controls { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1vh 1.4vh; align-items: center; }
   #controls input[type=range] { width: 100%; accent-color: #d8372f; }
@@ -47,6 +52,7 @@
 <div id="join" class="chrome"><img id="qr" alt=""><div>Answer on your phone<small id="url"></small></div></div>
 <div id="feed" class="chrome"></div>
 <div id="code" class="chrome"></div>
+<div id="dev" class="chrome"></div>
 <div id="controls" class="chrome">
   <label for="abstraction">Abstraction</label><input id="abstraction" type="range" min="0" max="1" step="0.05" value="0.5">
   <label for="magnitude">Magnitude</label><input id="magnitude" type="range" min="0" max="1" step="0.05" value="0.5">

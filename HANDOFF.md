@@ -104,7 +104,7 @@ The exact prompt for any request can be fetched with `POST /api/director/prompt`
 
 ### Display keys
 
-`S` controls, `C` scene code, themes and atmosphere, `P` save the picture as PNG, `F` feed,
+`S` controls, `D` director panel, `C` scene code, themes and atmosphere, `P` save the picture as PNG, `F` feed,
 `H` hide all chrome, `R` reset, `1`-`4` send an example answer.
 
 ## 4. The director, and how to run it in the background
@@ -197,8 +197,13 @@ checked with one Sonnet session (opening plus two batches, 37 s and 36 s per bat
 - the prompt now has rules for editing existing elements, making things interact, and letting the
   mood decide which version of a thing is drawn; "funny hats" put hats on the walker and the
   dinosaur, and "make them nice" redrew the data centres as planted, lit buildings;
-- answers in the feed turn green once the director has worked them into the picture.
-Not started: 5 (animation option), 6-7 (two-model split, leaner prompt), 9 (developer panel),
+- answers in the feed turn green once the director has worked them into the picture;
+- item 9: a developer panel (`D` on the display) shows the director at work in four stages: answers
+  waiting, the request in flight (elapsed time, prompt size), pieces queued to arrive, and finished
+  requests (time taken, ideas and which elements they touch, what was drawn, anything not applied).
+  It showed the whole prompt is only about 3,600 tokens, so the wait is the model writing drawing
+  code, not reading the prompt.
+Not started: 5 (animation option), 6-7 (two-model split, leaner prompt),
 10 (open rooms), 12 (continuous interpretation), 14 (more tone sliders), 15 (load management).
 
 Organised from the owner's notes after watching a Sonnet session and an Opus session. Their own

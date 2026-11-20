@@ -11,7 +11,7 @@ node server.js
 
 - Display (projector): http://localhost:3000/comic
 - Answers (phones): http://localhost:3000/ (QR code is on the display)
-- Keys on the display: `S` controls, `C` scene code and themes, `F` feed, `H` hide all, `R` reset
+- Keys on the display: `S` controls, `D` director panel, `C` scene code and themes, `P` save picture, `F` feed, `H` hide all, `R` reset
 
 ## How it works
 
