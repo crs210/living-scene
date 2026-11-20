@@ -66,7 +66,7 @@ ${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
 Report how strongly each is present in the batch, 0..1. They are not opposites; a room can hold several at once.
 
 THEMES (how repetition works)
-Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves.
+Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves.
 
 TURNING THOUGHTS INTO PICTURES
 The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN to this place for a stranger to feel that? Then draw the event, big.
@@ -107,7 +107,7 @@ const abstractionText = a => a < 0.25 ? 'LITERAL. Show what people name as itsel
   : a < 0.85 ? 'POETIC. Let scale, gravity and logic bend: things far too large, floating, growing where they should not, merging; the place stays recognisable.'
   : 'DREAMLIKE. The place is a dream of itself. Impossible and symbolic transformations are welcome; keep just enough landmarks to know it is the same shot.';
 const PHASE_TEXT = {
-  upheaval: 'EARLY. The calm opening is only a starting point: let these answers hit hard. Transform or replace opening landmarks, change the lay of the land, let large things arrive. The audience should see their words overturn the picture.',
+  upheaval: 'EARLY. The calm opening is only a starting point: let these answers hit hard. Transform or replace opening landmarks, change the lay of the land, let large things arrive. The audience should see their words overturn the picture. In this reply at least one of your elements must be an OPENING landmark rewritten (same id, new code, give it the theme that changed it) so that the place itself is altered, not just added to.',
   building: 'MIDDLE. The picture has a direction. Reinforce what the room keeps returning to: move it centre, connect themes to each other. New themes enter at modest size until repeated.',
   settling: 'LATE. Converge. No new themes unless several answers demand one. Clarify what dominates, let minor things recede, resolve unfinished business.',
 };
@@ -167,7 +167,7 @@ export function createDirector({ question: q0 }) {
     return {
       decay: g((a.grief + a.dread + a.anger) * 0.62 + a.unease * 0.2 - (a.hope + a.agency) * 0.3),
       bloom: g((a.hope + a.wonder + a.belonging + a.agency) * 0.5 - neg * 0.5),
-      light: clamp(0.6 + gain * ((a.hope + a.wonder) * 0.35 - (a.dread + a.grief) * 0.45 - a.unease * 0.15)),
+      light: clamp(0.6 + gain * ((a.hope + a.wonder) * 0.35 - (a.dread + a.grief) * 0.45 - a.unease * 0.15), 0.3, 1),   // never so dark it cannot be read
       warmth: clamp(gain * ((a.hope + a.belonging) * 0.9 - (a.dread + a.unease) * 0.8 - a.grief * 0.4), -1, 1),
       storm: g(a.anger * 0.8 + a.dread * 0.5 + a.urgency * 0.4 - a.hope * 0.2),
       rain: g(a.grief + a.dread * 0.35 - a.hope * 0.3 - a.wonder * 0.2),
