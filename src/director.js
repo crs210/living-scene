@@ -257,7 +257,15 @@ export function createDirector({ question: q0 }) {
     else if (!partial) {
       feel(patch.feelings, n); if (!final) answersSeen += n;
       if (patch.note) journal.push({ note: String(patch.note).slice(0, 300), n });
-      if (final) isFinal = true;
+      if (final) {
+        isFinal = true;
+        // Keep the finished session: the picture (as its elements), the journey, and the tally.
+        try {
+          const dir = path.join(process.cwd(), 'sessions'); fs.mkdirSync(dir, { recursive: true });
+          const w = weights();
+          fs.writeFileSync(path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '.json'), JSON.stringify({ question, opening: chosen, answers: answersSeen, settings, journey: journal.map(j => j.note), themes: [...themes].map(([k, t]) => ({ theme: k, answers: t.count, weight: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.answers - a.answers), feelings: total, atmosphere: atmosphere(), elements: [...live.values()] }, null, 1));
+        } catch (e) { console.error('could not save session:', e.message); }
+      }
       out.pruned = prune();
     }
     if (!partial) inFlight = 0;

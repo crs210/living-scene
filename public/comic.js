@@ -214,7 +214,7 @@ function applyScene(scene) {
   if (scene.m) Object.assign(moodT, scene.m);
   themesNow = scene.themes || []; if (JSON.stringify(scene.concepts || []) !== JSON.stringify(conceptsNow) || scene.chosen !== chosenNow) { conceptsNow = scene.concepts || []; chosenNow = scene.chosen; renderConcepts(); }
   if (scene.settings && !slidersTouched) for (const key of ['abstraction', 'magnitude']) { const inp = document.getElementById(key); if (inp) inp.value = scene.settings[key]; }
-  document.getElementById('keys').textContent = (scene.mode.startsWith('recorded') ? 'DEMO SCENE: pre-written, not Claude reading answers' : 'Scene written by ' + scene.mode) + '  ·  S controls · C scene code · F feed · H hide all · R reset';
+  document.getElementById('keys').textContent = (scene.mode.startsWith('recorded') ? 'DEMO SCENE: pre-written, not Claude reading answers' : 'Scene written by ' + scene.mode) + '  ·  S controls · C scene code · P save picture · F feed · H hide all · R reset';
   const seen = new Set();
   for (const e of scene.els) {
     seen.add(e.id);
@@ -347,6 +347,9 @@ function renderConcepts() {
   const box = document.getElementById('concepts'); box.innerHTML = '';
   conceptsNow.forEach((cn, i) => { const b = document.createElement('button'); b.className = 'concept' + (cn.title === chosenNow ? ' on' : ''); const h = document.createElement('b'); h.textContent = cn.title; const p = document.createElement('span'); p.textContent = cn.pitch; b.append(h, p); b.onclick = () => setting({ concept: i }); box.append(b); });
 }
+// keep the picture: a PNG of the panel exactly as it stands
+function savePicture() { cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'living-scene-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }); }
+document.getElementById('savepic').onclick = savePicture;
 document.getElementById('propose').onclick = () => setting({ propose: true });
 document.getElementById('own').onclick = () => { const v = document.getElementById('ownconcept').value.trim(); if (v) setting({ concept: v }); };
 const EXAMPLES = ['Honestly I just have a bad feeling about where this ends up', 'I worry hackers will use it to break into everything, but I hope it helps people understand each other', 'Cybersecurity. Every lock we rely on is going to fail', 'Excited about curing diseases, though my kids may never find jobs'];
@@ -354,6 +357,7 @@ addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   if (e.target.tagName === 'INPUT') return;
   if (key === 's') document.body.classList.toggle('controls');
+  if (key === 'p') savePicture();
   if (key === 'f') document.body.classList.toggle('nofeed');
   if (key === 'h') document.body.classList.toggle('bare');
   if (key === 'c') { document.body.classList.toggle('code'); renderCodePanel(); }
