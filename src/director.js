@@ -126,7 +126,7 @@ export function createDirector({ question: q0 }) {
   const themes = new Map();                      // key -> { count, born, last, gist }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
-  let journal = [], answersSeen = 0, concepts = [], chosen = null;
+  let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0;
   const zero = () => Object.fromEntries(F.map(f => [f, 0]));
   let recent = zero(), total = zero(), weight = 0;
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiter = null, inFlight = 0;
@@ -242,7 +242,9 @@ export function createDirector({ question: q0 }) {
         t.count += Math.max(1, Math.min(n, Number(i.n) || 1)); t.last = batchNo; themes.set(key, t);
       }
     }
-    const cap = isOpening ? 12 : final ? 3 : partial ? 1 : maxAdd(n);
+    // Honour the allowance the director was told when the request went out, even if the phase has moved on since.
+    const cap = isOpening ? 12 : final ? 3 : partial ? 1 : Math.max(maxAdd(n), issuedCap); issuedCap = 0;
+    for (const a of (patch.add || []).slice(cap)) out.rejected.push((a?.id || '?') + ' (over the allowance of ' + cap + ')');
     for (const a of (patch.add || []).slice(0, cap)) {
       if (!a || typeof a.code !== 'string' || !a.id || a.code.length > 6000) { out.rejected.push(a?.id || '?'); continue; }
       const prev = live.get(a.id), key = a.theme ? String(a.theme).toLowerCase().trim().replace(/\s+/g, '-') : (prev?.theme ?? null);
@@ -352,7 +354,7 @@ export function createDirector({ question: q0 }) {
     if (!live.size) return { kind: 'open', ...prompt('open') };
     if (!queue.length && !wantFinal) await new Promise(r => { waiter = r; setTimeout(r, waitMs); });
     if (wantConcepts) { wantConcepts = false; return { kind: 'concepts', ...prompt('concepts') }; }
-    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; return { kind: 'patch', answers, ...prompt('patch', answers) }; }
+    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); return { kind: 'patch', answers, ...prompt('patch', answers) }; }
     if (wantFinal) { wantFinal = false; return { kind: 'final', ...prompt('final') }; }
     return { kind: 'idle' };
   }
