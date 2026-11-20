@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Living Scene (comic)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; height: 100%; background: #e9dcc0; overflow: hidden; font-family: 'Patrick Hand', 'Segoe Print', 'Comic Sans MS', sans-serif; color: #15111c; }
+  #q { font-family: 'Bangers', 'Impact', sans-serif !important; font-weight: 400 !important; letter-spacing: .06em; font-size: 2.9vh !important; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .chrome { position: fixed; transition: opacity .5s; }
+  body.bare .chrome { opacity: 0 !important; pointer-events: none; }
+  #q { top: 4.5vh; left: 4.5vw; max-width: 46vw; font: 700 2.3vh/1.25 inherit; font-family: inherit; background: #f6c544; border: .45vh solid #15111c; padding: 1vh 1.6vh; box-shadow: .6vh .6vh 0 #15111c; transform: rotate(-1deg); }
+  #join { bottom: 5vh; left: 4.5vw; display: flex; gap: 1.2vh; align-items: center; font: 700 1.7vh/1.3 inherit; font-family: inherit; background: #fbf6e9; border: .45vh solid #15111c; padding: 1vh; box-shadow: .6vh .6vh 0 #15111c; }
+  #join img { width: 9.5vh; height: 9.5vh; display: block; }
+  #join small { display: block; font-weight: 400; }
+  #feed { top: 4.5vh; right: 4vw; width: 22vw; max-height: 60vh; overflow: hidden; display: flex; flex-direction: column; gap: 1.2vh; }
+  body.nofeed #feed { opacity: 0; pointer-events: none; }
+  #feed div { background: #fbf6e9; border: .4vh solid #15111c; border-radius: 2.2vh; padding: 1vh 1.4vh; font-size: 1.6vh; line-height: 1.3; box-shadow: .45vh .45vh 0 #15111c; animation: in .4s cubic-bezier(.3,1.6,.6,1); }
+  #feed div:nth-child(n+5) { opacity: .65; } #feed div:nth-child(n+8) { opacity: .3; }
+  @keyframes in { from { opacity: 0; transform: scale(.7); } }
+  #code { top: 0; right: 0; bottom: 0; width: 36vw; background: rgba(21,17,28,.93); color: #e8e2d0; font: 1.35vh/1.45 ui-monospace, Consolas, monospace; padding: 2vh; overflow: auto; display: none; white-space: pre-wrap; }
+  body.code #code { display: block; } body.code #feed { display: none; }
+  #code h3 { font: 700 1.6vh system-ui, sans-serif; color: #f6c544; margin: 0 0 .6vh; }
+  #code .el { color: #9aa3b5; } #code .new { color: #57c7c2; }
+  #controls { left: 50%; bottom: 4.5vh; transform: translateX(-50%); background: #fbf6e9; border: .45vh solid #15111c; box-shadow: .6vh .6vh 0 #15111c; padding: 1.4vh 2vh; display: none; font-size: 1.7vh; width: min(92vw, 120vh); }
+  body.controls #controls { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1vh 1.4vh; align-items: center; }
+  #controls input[type=range] { width: 100%; accent-color: #d8372f; }
+  #controls small { grid-column: 2; opacity: .7; margin-top: -1vh; } #controls small + small { grid-column: 4; }
+  #controls .row { grid-column: 1 / -1; display: flex; gap: 1vh; align-items: center; flex-wrap: wrap; }
+  #controls button { font: inherit; background: #f6c544; border: .3vh solid #15111c; padding: .5vh 1.2vh; cursor: pointer; }
+  #controls input[type=text], #controls input[type=number] { font: inherit; padding: .4vh .8vh; border: .3vh solid #15111c; background: #fff; }
+  #keys { bottom: .8vh; left: 50%; transform: translateX(-50%); font: 1.2vh system-ui, sans-serif; opacity: .5; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="q" class="chrome"></div>
+<div id="join" class="chrome"><img id="qr" alt=""><div>Answer on your phone<small id="url"></small></div></div>
+<div id="feed" class="chrome"></div>
+<div id="code" class="chrome"></div>
+<div id="controls" class="chrome">
+  <label for="abstraction">Abstraction</label><input id="abstraction" type="range" min="0" max="1" step="0.05" value="0.5">
+  <label for="magnitude">Magnitude</label><input id="magnitude" type="range" min="0" max="1" step="0.05" value="0.5">
+  <small>literal ← → dreamlike</small><small>gentle ← → bold</small>
+  <div class="row"><button id="start">Start session</button><input id="secs" type="number" value="120" min="20" style="width:9vh" aria-label="Session length in seconds"> seconds <button id="settle">Settle now</button><button id="final">Final image</button></div>
+  <div class="row"><input id="question" type="text" placeholder="New question…" style="flex:1" aria-label="New question"><button id="newq">New scene from question</button></div>
+</div>
+<div id="keys" class="chrome">C scene code · F feed · H hide all · 1–4 example answers · R reset</div>
+<script type="module" src="comic.js"></script>
+</body>
+</html>

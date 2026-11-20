@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Living Scene</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05060f; overflow: hidden; font-family: Georgia, 'Times New Roman', serif; color: #f4f1ea; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .chrome { position: fixed; transition: opacity .6s; text-shadow: 0 1px 12px rgba(0,0,0,.8); }
+  body.bare .chrome { opacity: 0 !important; pointer-events: none; }
+  #q { top: 3.2vh; left: 3vw; max-width: 52vw; font-size: 2.6vh; font-style: italic; opacity: .82; letter-spacing: .01em; }
+  #join { bottom: 3vh; left: 3vw; display: flex; gap: 1.4vh; align-items: center; font: 600 1.9vh/1.3 system-ui, sans-serif; opacity: .85; }
+  #join img { width: 11vh; height: 11vh; border-radius: .8vh; display: block; }
+  #join small { display: block; font-weight: 400; opacity: .7; }
+  #feed { top: 3vh; right: 2vw; width: 24vw; max-height: 70vh; overflow: hidden; display: flex; flex-direction: column; gap: 1vh; }
+  body.nofeed #feed { opacity: 0; pointer-events: none; }
+  #feed div { background: rgba(8,10,24,.52); border: 1px solid rgba(255,255,255,.09); border-radius: 1vh; padding: 1vh 1.3vh; font: 1.7vh/1.35 system-ui, sans-serif; cursor: pointer; animation: in .7s ease-out; backdrop-filter: blur(3px); }
+  #feed div:nth-child(n+6) { opacity: .6; } #feed div:nth-child(n+9) { opacity: .3; }
+  @keyframes in { from { opacity: 0; transform: translateY(-1vh); } }
+  #dbg { bottom: 3vh; right: 2vw; font: 1.5vh/1.5 ui-monospace, Consolas, monospace; background: rgba(0,0,0,.6); padding: 1vh 1.4vh; border-radius: .8vh; white-space: pre; display: none; }
+  body.debug #dbg { display: block; }
+  #guess { position: fixed; left: 50%; bottom: 5vh; transform: translateX(-50%); width: min(92vw, 110vh); font: 2vh/1.4 system-ui, sans-serif; text-align: center; text-shadow: 0 1px 10px #000; }
+  #guess:empty { display: none; }
+  #guess .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2vh; margin-top: 1.4vh; text-align: left; }
+  #guess button { font: inherit; color: inherit; text-align: left; padding: 1.4vh 1.8vh; background: rgba(8,10,24,.78); border: 1px solid rgba(255,255,255,.25); border-radius: 1.2vh; cursor: pointer; }
+  #guess button:hover, #guess button:focus-visible { border-color: #ffc86e; outline: none; }
+  #guess b { color: #ffc86e; margin-right: .8vh; }
+  #guess .panel { background: rgba(8,10,24,.82); border-radius: 1.2vh; padding: 1.6vh 2vh; }
+  #guess table { margin: 1vh auto 0; border-collapse: collapse; font-size: 1.7vh; text-align: left; }
+  #guess td { padding: .2vh 1.2vh; }
+  #keys { bottom: 1vh; left: 50%; transform: translateX(-50%); font: 1.25vh system-ui, sans-serif; opacity: .35; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="q" class="chrome"></div>
+<div id="join" class="chrome"><img id="qr" alt=""><div>Answer on your phone<small id="url"></small></div></div>
+<div id="feed" class="chrome"></div>
+<div id="dbg" class="chrome"></div>
+<div id="keys" class="chrome">F feed · H hide all · D diagnostics · 1–4 example answers · G guess test · R reset</div>
+<div id="guess"></div>
+<script type="module" src="display.js"></script>
+</body>
+</html>

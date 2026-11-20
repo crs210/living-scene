@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your answer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100dvh; background: linear-gradient(#0b0f2a, #1c1f4a 60%, #3a3560); color: #f4f1ea; font: 17px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; display: flex; }
+  main { width: 100%; max-width: 520px; margin: auto; padding: 28px 16px; }
+  h1 { font: italic 400 26px/1.25 Georgia, serif; margin: 0 0 22px; text-wrap: balance; }
+  textarea { width: 100%; min-height: 132px; padding: 14px; font: inherit; color: inherit; background: rgba(6,8,22,.55); border: 1px solid rgba(255,255,255,.22); border-radius: 14px; resize: vertical; }
+  textarea:focus { outline: 2px solid #ffc86e; outline-offset: 1px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; }
+  button { font: 600 17px system-ui, sans-serif; padding: 13px 26px; border: 0; border-radius: 999px; background: #ffc86e; color: #1a1430; }
+  button:disabled { opacity: .45; }
+  #count { font-size: 13px; opacity: .6; }
+  #msg { min-height: 1.5em; margin-top: 14px; font-size: 15px; }
+  #msg.bad { color: #ffb4a8; }
+  label { display: flex; gap: 10px; align-items: flex-start; margin-top: 22px; font-size: 13.5px; opacity: .78; }
+  input[type=checkbox] { width: 18px; height: 18px; margin-top: 1px; accent-color: #ffc86e; flex: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="q">&nbsp;</h1>
+  <textarea id="t" maxlength="240" placeholder="A sentence or two. Mixed feelings welcome." aria-label="Your answer"></textarea>
+  <div class="row"><span id="count">0 / 240</span><button id="send" disabled>Send</button></div>
+  <div id="msg" role="status"></div>
+  <label><input type="checkbox" id="tone" checked><span>Let the scene stir while I type. Only a mood number is sent, worked out on this phone. Your words stay here until you press Send, and answers are shown without names.</span></label>
+</main>
+<script type="module">
+import { toneOf } from './tone.js';
+const $ = id => document.getElementById(id), t = $('t'), send = $('send'), msg = $('msg');
+const cid = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2);
+fetch('/api/config').then(r => r.json()).then(c => $('q').textContent = c.question);
+let lastDraft = 0, timer = null;
+function draft() {
+  if (!$('tone').checked || !t.value.trim()) return;
+  const now = Date.now(); clearTimeout(timer);
+  if (now - lastDraft < 700) { timer = setTimeout(draft, 700 - (now - lastDraft)); return; }
+  lastDraft = now;
+  const { v, energy } = toneOf(t.value);
+  fetch('/api/draft', { method: 'POST', body: JSON.stringify({ cid, val: v ?? 0, energy }) }).catch(() => {});
+}
+t.addEventListener('input', () => { $('count').textContent = `${t.value.length} / 240`; send.disabled = t.value.trim().length < 3; msg.textContent = ''; draft(); });
+async function go() {
+  send.disabled = true;
+  try {
+    const r = await (await fetch('/api/submit', { method: 'POST', body: JSON.stringify({ cid, text: t.value }) })).json();
+    msg.className = r.ok ? '' : 'bad';
+    if (r.ok) { t.value = ''; $('count').textContent = '0 / 240'; msg.textContent = 'Sent. Look up: a light is carrying it into the scene. Add another whenever you like.'; }
+    else { msg.textContent = r.reason; send.disabled = false; }
+  } catch { msg.className = 'bad'; msg.textContent = 'Could not reach the room. Try again.'; send.disabled = false; }
+}
+send.addEventListener('click', go);
+t.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !send.disabled) go(); });
+</script>
+</body>
+</html>

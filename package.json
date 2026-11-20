@@ -1,0 +1,16 @@
+{
+  "name": "living-scene",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A live audience discussion rendered as one continuously evolving scene.",
+  "scripts": {
+    "start": "node server.js",
+    "examples": "node tools/examples.js",
+    "burst": "node tools/burst.js"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "qrcode": "^1.5.4"
+  }
+}
