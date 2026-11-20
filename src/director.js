@@ -145,13 +145,13 @@ export function createDirector({ question: q0 }) {
   // ---- themes: repetition is what makes something big ----
   function weights() {
     let max = 1; for (const t of themes.values()) max = Math.max(max, t.count);
-    const g = ({ final: 2, settling: 1.5 })[phase()] || 1, out = {};
-    for (const [k, t] of themes) { let w = Math.pow(t.count / max, g); if (batchNo - t.born <= 1 && phase() !== 'final') w = Math.max(w, 0.4); out[k] = clamp(w, 0.1, 1); }
+    const g = ({ final: 1.5, settling: 1.5 })[phase()] || 1, out = {};
+    for (const [k, t] of themes) { let w = Math.pow(t.count / max, g); if (batchNo - t.born <= 1 && phase() !== 'final') w = Math.max(w, 0.4); out[k] = clamp(w, phase() === 'final' ? 0.28 : 0.1, 1); }
     return out;
   }
   function prune() {
     const w = weights(), arrivals = [...live.values()].filter(e => e.theme && e.born < batchNo);
-    const floor = ({ final: 0.25, settling: 0.16 })[phase()] || 0, removed = [];
+    const floor = ({ settling: 0.16 })[phase()] || 0, removed = [];   // in the final image the director's own choices stand
     arrivals.sort((a, b) => (w[a.theme] ?? 0) - (w[b.theme] ?? 0));
     let extra = [...live.values()].filter(e => e.theme).length - MAX_ARRIVALS;
     for (const e of arrivals) if (extra > 0 || (w[e.theme] ?? 0) < floor) { live.delete(e.id); removed.push(e.id); extra--; }

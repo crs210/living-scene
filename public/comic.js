@@ -193,7 +193,7 @@ addEventListener('resize', resize); resize();
 
 function frame(now) {
   const dt = Math.min(0.1, (now - prev) / 1000), t = now / 1000; prev = now; fps += (1 / Math.max(dt, 0.001) - fps) * 0.05;
-  slow += (dt - slow) * 0.05; if (slow > 0.036) Q = Math.min(2.2, Q + 0.02); else if (slow < 0.024) Q = Math.max(1, Q - 0.005);
+  slow += (dt - slow) * 0.05; if (slow > 0.05) Q = Math.min(1.8, Q + 0.01); else if (slow < 0.034) Q = Math.max(1, Q - 0.01);
   boil = Math.floor(t * (5 + 7 * mood.tension)); WOB = 1.7 + 3.4 * mood.tension;
   for (const key in mood) mood[key] += (moodT[key] - mood[key]) * (1 - Math.exp(-dt / (phase === 'final' ? 5 : 3)));
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.fillStyle = PAPER; g.fillRect(0, 0, cv.width, cv.height);
@@ -241,9 +241,9 @@ function atmosphere(t) {
   if (M.wonder > 0.04) for (let i = 0; i < M.wonder * 46; i++) { const tw = Math.sin(t * (1.5 + hash(i) * 2) + i * 2.1); if (tw < 0.2) continue; g.globalAlpha = tw * 0.9; k.sparkle(hash(i + 11) * 1600, hash(i + 23) * 640 + Math.sin(t * 0.3 + i) * 10, 5 + tw * 9, i % 3 ? '#fbf6e9' : '#f6c544'); }
   g.globalAlpha = 1;
   // grade: wear drains the colour; light and warmth tint the whole print
-  if (M.decay > 0.02) { g.globalCompositeOperation = 'saturation'; g.globalAlpha = Math.min(0.75, M.decay * 0.8); g.fillStyle = '#7a7a7a'; g.fillRect(0, 0, 1600, 900); }
+  if (M.decay > 0.02) { g.globalCompositeOperation = 'saturation'; g.globalAlpha = Math.min(0.5, M.decay * 0.55); g.fillStyle = '#7a7a7a'; g.fillRect(0, 0, 1600, 900); }
   const dark = clamp((0.6 - M.light) / 0.6), bright = clamp((M.light - 0.6) / 0.4);
-  if (dark > 0.01) { g.globalCompositeOperation = 'multiply'; g.globalAlpha = dark * 0.72; g.fillStyle = '#1a1838'; g.fillRect(0, 0, 1600, 900); }
+  if (dark > 0.01) { g.globalCompositeOperation = 'multiply'; g.globalAlpha = dark * 0.58; g.fillStyle = '#1a1838'; g.fillRect(0, 0, 1600, 900); }
   if (bright > 0.01) { g.globalCompositeOperation = 'soft-light'; g.globalAlpha = bright * 0.55; g.fillStyle = '#fff4d0'; g.fillRect(0, 0, 1600, 900); }
   if (Math.abs(M.warmth) > 0.03) { g.globalCompositeOperation = 'soft-light'; g.globalAlpha = Math.abs(M.warmth) * 0.5; g.fillStyle = M.warmth > 0 ? '#ff9a3c' : '#2f58d8'; g.fillRect(0, 0, 1600, 900); }
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
