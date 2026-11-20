@@ -240,6 +240,38 @@ words are at the end of this file; where the two differ, their words win.
 This needs the server to hold several independent scenes (today there is one global director and
 one world), a per-scene event stream, and a per-scene director queue.
 
+### E. Making it feel live (added later the same day)
+
+11. **Stagger the arrival of a batch.** Today everything in a reply appears at once. Instead, let
+    the parts enter one after another: the dinosaur morphs in, a little later the data centre rises
+    from the ground, then the sky changes. This makes the picture feel continuously alive and hides
+    the time the next batch takes to process.
+    - Cheapest version: the app holds a reply and releases its pieces a few seconds apart (numbers
+      and atmosphere first, then each new or rewritten element, in an order Claude can suggest).
+    - In API mode the parallel draw passes already land one by one as each finishes; a minimum gap
+      and an order would make that deliberate rather than accidental.
+    - Entrances should suit the thing: rise from the ground, drift in, grow, fade up. Today every
+      new element simply grows from zero.
+12. **Keep interpreting while the picture is busy.** The cheap step (consolidate the answers into
+    ideas, score the sentiment, decide what should change) can run continuously as answers arrive,
+    without sending anything to be drawn. The expensive drawing step then takes the consolidated
+    result. Interpretation and drawing become two separate stages with a queue between them.
+13. **The mood of the room should shape how a new thing is drawn, not only the weather around it.**
+    The same idea arrives differently depending on the sentiment it came with: a data centre from a
+    gloomy batch is a grim block; from an optimistic batch it is futuristic, well made and fitted
+    into its surroundings (an idealised version). Today an element reacts to the overall
+    atmosphere after it exists (`m.decay`, `m.bloom`); this asks for the sentiment of the batch to
+    be part of the drawing brief itself, and remembered per element.
+14. **More kinds of tone than light and dark, each with a slider.** Suggested axes: darker /
+    dystopian vs happier / hopeful; futuristic / intelligent vs basic; funny vs serious. These
+    should be both read from the answers and adjustable by the host, and should affect three
+    things: the overall look, the elements already in the picture, and the instructions for what
+    is drawn next. (Today there are nine feelings mapped to atmosphere, and two sliders.)
+15. **Manage load rather than fix a batch rule.** Batches could close on a count of answers as well
+    as on time, but a flood of answers could make everything slower and the picture worse. Treat
+    this as something to manage: cap how much one batch may change, consolidate heavily when
+    volume is high, and keep the picture moving with staggered arrivals while work is in progress.
+
 ### The owner's words
 
 > There is issues with this. It did prune things a bit too easily and quickly. It should maybe make
@@ -287,3 +319,35 @@ one world), a per-scene event stream, and a per-scene director queue.
 > seeing the prompts of other people, and seeing the final output one. That could be kind of fun.
 > We can again pick ones. Maybe for one of them would be, what do we think about Canada? Or
 > something like that, and see how people find that. It could be kind of amusing or bad.
+
+Added later the same day:
+
+> What we could do to make it feel more live is, instead of each batch being, when it's turned into
+> the image, sort of popped in, each batch would have different parts that would be entering into
+> the image. Because even if it's coming in as one idea, in fact, it's like many ideas come in, it
+> gets sort of consolidated down to what these sort of mean. It then takes those and gives it the
+> different sentiments. So how it's going to change the overall style of the picture. So if it
+> needs to make things a bit darker, or make things look a bit more dystopian, or make things look
+> happier, or better, or more hopeful, or more intelligent, more futuristic, or more basic, or
+> different sentiments we can get in there. Maybe like how people would find it might be seen if
+> it's people more funny sort of thing, more serious. There would be more sliders to sort of play
+> with on the image to sort of edit a bit differently, while also affecting the pictures as well,
+> what's in there. And also it can affect what the prompt is. Like in that batch is quite negative,
+> but then it's adding something in that maybe would be taken as be a bit more negative than it
+> taking something in when everyone's been a bit positive. That would become more of a idealized
+> version of it. So like a data center, if everyone's really down and negative about it, would come
+> in as like a block sort of awful looking thing. But if everyone was in a good mood, maybe the
+> data center would look more futuristic and look more within the environment, like they spent
+> money on making it fitting. They're the sort of things that it needs to be able to change and
+> adapt with. But to make it less sort of snapshotty, it can start adding parts into the images as
+> they're done. So for the one before, I said we'd bring back the dinosaurs. It would then bring
+> the dinosaurs back, and at the same time, it could have been doing the data center stuff. So they
+> don't just pop in at the same time. It's like one sort of morphs in, and then the data center
+> rises from the ground a bit later, and then the sky changes. So then it will hide the time it
+> takes for the next batch to be processed. The processing of the batch could be done live as well,
+> but not given to the image generation. So it would sort of be adjusting it and taking what comes
+> in and then outputting it. It also might need to be able to, instead of going on a time period,
+> maybe when it hits a certain limit of how many prompts have come in and stuff, that could make it
+> worse though. If we're getting loads of prompts in, that could actually make the whole thing
+> slower and worse and make the image output worse. So it's less something that we need to do and
+> include, and it's more something that we need to maybe potentially manage, like how it's working.
