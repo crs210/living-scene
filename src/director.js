@@ -73,7 +73,7 @@ ${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
 Report how strongly each is present in the batch, 0..1. They are not opposites; a room can hold several at once.
 
 THEMES (how repetition works)
-Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
+Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. For each idea also list "touches": the ids of the existing elements that idea changes (may be empty). When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
 
 TURNING THOUGHTS INTO PICTURES
 The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN to this place for a stranger to feel that? Then draw the event, big.
@@ -86,6 +86,15 @@ The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN 
   a prediction ("we will adapt"): show the place mid-change. New growth through old cracks; scaffolding turning into something lived in.
   a process ("always rushing to catch up"): show the mechanism. A road that lengthens ahead of the walker; a tide outpacing people on the sand.
 Reach for these, not for a small person performing the idea: scale shifts, architecture that changes, ground that splits or rises, light sources, things tethered or cut loose, shadows and reflections that disagree with their owners, things out of place, things half-built or half-buried, paths, thresholds, horizons.
+EDITING WHAT IS ALREADY THERE
+Before adding anything, check each answer against the list of elements. If an answer is about something already in the picture, or would change it ("funny hats", "more trees", "cooler power lines", "make the houses bigger", "the sun turns green"), then REWRITE that element: same id, new code that keeps what it showed and adds the change (the people now wear absurd hats; the pylons now glow). Do not fold such an answer into a general theme and move on, and do not add a separate object for it. A small specific request that is visibly honoured matters more to its author than a grand gesture.
+
+THINGS MUST INTERACT
+A new idea never simply lands on top of the scene as one large separate object. Work it INTO what is there, a different way each time: built out of an existing landmark, growing through it, housed inside it, draining it, feeding it, propping it up, crowding it, reflected in it, carried by the people. Every new element must change at least one neighbour too: set a number on it or rewrite it (the data centre's pipe empties the pool; the dinosaur browses the tree someone else asked for; the cottage gains an aerial). In "desc" say what it is attached to.
+
+THE MOOD DECIDES WHICH VERSION YOU DRAW
+The same thing arrives differently depending on the feeling it came with. Voiced with dread or anger, a data centre is a crude windowless slab, oversized, fenced, dumped on the land. Voiced with hope or wonder, it is the idealised version: elegant, lit, planted, fitted into the hillside as if money and care were spent on it. Voiced as a joke, it is playful and absurd. Build that character into the shape itself when you draw, in addition to the decay and bloom response.
+
 At most one new element per batch may be mainly a figure. Never solve two ideas the same way. No lettering, captions, icons or floating symbols.
 
 SIZE
@@ -95,24 +104,24 @@ OPENING SHOT (when asked)
 The opening is only where the picture starts; within a few batches the audience should have overturned it. So make a stage: a specific place seen from a specific spot, with a clear horizon, three or four LARGE simple landmarks, open ground where things can arrive, and quiet life. Do not pre-load it with imagery that already answers the question. Return 6 to 8 elements with no theme. Give each landmark one or two numbers that could later transform it (not just dim it). In each "desc" (under 240 characters) say what it is, where it sits in canvas coordinates, and what its numbers mean.
 
 EACH BATCH
-You are told the PHASE and the two controls, ABSTRACTION and MAGNITUDE; follow them. Look first at what exists: deepen a present theme through its elements' numbers; connect new ideas to old ones (the pipe that drains the sea runs from the building someone else asked for). You may rewrite any element, including opening landmarks, by returning its id with new code, and remove elements the room has left behind. New element "desc" under 200 characters: what, where, what its numbers mean. End with a "note": one plain sentence on what the whole picture now says.
+You are told the PHASE and the two controls, ABSTRACTION and MAGNITUDE; follow them. Look first at what exists: deepen a present theme through its elements' numbers; connect new ideas to old ones (the pipe that drains the sea runs from the building someone else asked for). You may rewrite any element, including opening landmarks, by returning its id with new code, Themes the room stops voicing recede by themselves (the app shrinks them, fades them and moves them aside), so do NOT remove an element just because it has gone quiet; remove only what the room has contradicted or what you have replaced. Give every element "at": [x, y], the point where it stands (its base), and "enter": how it should arrive: "rise" (up out of the ground), "drop" (from above), "slide" (in from the nearer side), "grow" (swelling from its base) or "fade". The pieces of your reply are revealed one after another in the order you list them in "add", a few seconds apart, so order them as a small story. New element "desc" under 200 characters: what, where, what its numbers mean. End with a "note": one plain sentence on what the whole picture now says.
 
 FINAL IMAGE (when asked)
 No new ideas. Compose one balanced picture: what the room felt most is largest and clearest, passing remarks are removed, unfinished things resolve, and the numbers come to rest.
 
 REPLY FORMAT: only JSON.
 { "feelings": { ${F.map(f => `"${f}": 0`).join(', ')} },
-  "ideas": [ { "theme": "key", "n": 1, "gist": "five words" } ],
+  "ideas": [ { "theme": "key", "n": 1, "gist": "five words", "touches": [ "id" ] } ],
   "set": [ { "id", "params": [ { "name", "value" } ] } ],
-  "add": [ { "id", "theme", "layer", "desc", "code", "params": [ { "name", "value" } ] } ],
+  "add": [ { "id", "theme", "layer", "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
   "remove": [ "id" ],
   "note": "..." }
 Lists may be empty. For an opening shot only "add" and "note" matter.`;
 
 const abstractionText = a => a < 0.25 ? 'LITERAL. Show what people name as itself, at believable scale; feelings appear through weather, light, repair and what crowds do.'
   : a < 0.6 ? 'GROUNDED METAPHOR. Ideas become things that could almost happen in this place.'
-  : a < 0.85 ? 'POETIC. Let scale, gravity and logic bend: things far too large, floating, growing where they should not, merging; the place stays recognisable.'
-  : 'DREAMLIKE. The place is a dream of itself. Impossible and symbolic transformations are welcome; keep just enough landmarks to know it is the same shot.';
+  : a < 0.85 ? 'POETIC. Let scale, gravity and logic bend: things far too large, floating, growing where they should not, merging into each other; the place stays recognisable. Prefer the surprising reading of an answer to the obvious one.'
+  : 'DREAMLIKE. Be bold; the obvious picture is the wrong one. The place is a dream of itself: landmarks turn into other things, objects are made of the wrong material, sizes are absurd, ideas fuse into hybrids (a data centre that is also a beehive; a staircase of open hands), the ground and sky may swap roles. Every reply should contain at least one image nobody in the room would have predicted. Keep just enough landmarks to know it is the same shot.';
 const PHASE_TEXT = {
   upheaval: 'EARLY. The calm opening is only a starting point: let these answers hit hard. Transform or replace opening landmarks, change the lay of the land, let large things arrive. The audience should see their words overturn the picture. In this reply at least one of your elements must be an OPENING landmark rewritten (same id, new code, give it the theme that changed it) so that the place itself is altered, not just added to.',
   building: 'MIDDLE. The picture has a direction. Reinforce what the room keeps returning to: move it centre, connect themes to each other. New themes enter at modest size until repeated.',
@@ -126,7 +135,10 @@ export function createDirector({ question: q0 }) {
   const themes = new Map();                      // key -> { count, born, last, gist }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
-  let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0;
+  let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, ghosts = [], revealClock = 0;
+  const GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
+  const ENTER = ['rise', 'drop', 'slide', 'grow', 'fade'];
+  const nextReveal = () => (revealClock = Math.max(Date.now() + 1200, revealClock + GAP));
   const zero = () => Object.fromEntries(F.map(f => [f, 0]));
   let recent = zero(), total = zero(), weight = 0;
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiter = null, inFlight = 0;
@@ -158,11 +170,13 @@ export function createDirector({ question: q0 }) {
     return out;
   }
   function prune() {
-    const w = weights(), arrivals = [...live.values()].filter(e => e.theme && e.born < batchNo);
-    const floor = ({ settling: 0.16 })[phase()] || 0, removed = [];   // in the final image the director's own choices stand
+    // Weak themes are not deleted: they recede (see scene()). Deletion happens only when the scene is over-full,
+    // and then only for arrivals whose theme nobody has voiced for a while. Opening landmarks are never pruned.
+    const w = weights(), removed = [];
+    const arrivals = [...live.values()].filter(e => e.theme && !e.stage && batchNo - (themes.get(e.theme)?.last ?? 0) >= 2);
     arrivals.sort((a, b) => (w[a.theme] ?? 0) - (w[b.theme] ?? 0));
-    let extra = [...live.values()].filter(e => e.theme).length - MAX_ARRIVALS;
-    for (const e of arrivals) if (extra > 0 || (w[e.theme] ?? 0) < floor) { live.delete(e.id); removed.push(e.id); extra--; }
+    let extra = [...live.values()].filter(e => e.theme && !e.stage).length - MAX_ARRIVALS;
+    for (const e of arrivals) if (extra > 0) { live.delete(e.id); ghosts.push({ el: e, until: nextReveal() }); removed.push(e.id); extra--; }
     return removed;
   }
 
@@ -195,7 +209,15 @@ export function createDirector({ question: q0 }) {
   function scene(world, snap) {
     if (!recorded()) {
       const w = weights();
-      const els = [...live.values()].map(e => e.theme && w[e.theme] !== undefined ? { ...e, params: { ...e.params, w: w[e.theme] } } : e);
+      const now = Date.now(); ghosts = ghosts.filter(g => g.until > now && !live.has(g.el.id));
+      // an element not yet revealed shows as its previous version (or not at all); removed ones linger until their turn
+      const shown = [...live.values()].map(e => e.revealAt > now ? e.was : e).filter(Boolean).concat(ghosts.map(g => g.el));
+      const els = shown.map(({ was, revealAt, ...e }) => {
+        if (!e.theme || w[e.theme] === undefined) return e;
+        const quiet = batchNo - (themes.get(e.theme)?.last ?? batchNo);
+        const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
+        return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
+      });
       return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
         themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
     }
@@ -214,7 +236,7 @@ export function createDirector({ question: q0 }) {
     if (kind === 'concepts') return { system: SYSTEM, user: `The question on screen will be:\n"${question}"\n\nBefore any drawing, propose FOUR different opening stages for the host to choose between. Make them really different in kind: one everyday and literal, one a metaphorical place, one unexpected or surreal, and one nearly empty stage that the audience will fill. Each needs a title (2 to 4 words), a pitch (one sentence: the place and the viewpoint) and "room" (one sentence: what kinds of answers could arrive, break, grow or gather there).\nReturn only JSON: { "concepts": [ { "title", "pitch", "room" } ] }` };
     if (kind === 'open') return { system: SYSTEM, user: `The question on screen is:\n"${question}"\n\n${chosen ? `The host chose this opening stage:\n${chosen.title}: ${chosen.pitch}\n\n` : ''}${abs}\n\nWrite the opening shot.` };
     const w = weights();
-    const els = [...live.values()].map(e => `- ${e.id}${e.theme ? ` [theme ${e.theme}, w ${(w[e.theme] ?? 0).toFixed(2)}]` : ' [opening]'} (layer ${e.layer}) ${JSON.stringify(e.params)}: ${e.desc}`).join('\n');
+    const els = [...live.values()].map(e => `- ${e.id}${e.theme ? ` [theme ${e.theme}, w ${(w[e.theme] ?? 0).toFixed(2)}]` : ''}${e.stage ? ' [opening landmark]' : ''} (layer ${e.layer}${e.at ? `, at ${e.at.join(',')}` : ''}) ${JSON.stringify(e.params)}: ${e.desc}`).join('\n');
     const th = [...themes].sort((a, b) => b[1].count - a[1].count).map(([k, t]) => `- ${k}: ${t.count} answer${t.count === 1 ? '' : 's'}, weight ${w[k].toFixed(2)} (${t.gist})`).join('\n') || '(none yet)';
     const story = journal.slice(-6).map((j, i) => `${i + 1}. ${j.note}`).join('\n') || '(nothing yet)';
     const head = `The question on screen is:\n"${question}"\n\nThe journey so far (${answersSeen} answers):\n${story}\nFeelings across the session: ${top(total)}\nFeelings lately: ${top(recent)}\n\nThemes so far:\n${th}\n\nElements in the scene now:\n${els}\n\n`;
@@ -250,11 +272,17 @@ export function createDirector({ question: q0 }) {
       const prev = live.get(a.id), key = a.theme ? String(a.theme).toLowerCase().trim().replace(/\s+/g, '-') : (prev?.theme ?? null);
       if (key && !themes.has(key)) themes.set(key, { count: 1, born: batchNo, last: batchNo, gist: key });
       const { w, ...params } = { ...(prev?.params || {}), ...obj(a.params) };
-      live.set(a.id, { id: String(a.id), layer: Number(a.layer) || 0, desc: String(a.desc || '').slice(0, 400), code: a.code, params, theme: isOpening ? null : key, opening: isOpening || (prev?.opening && !key), born: prev?.born ?? batchNo });
+      const at = Array.isArray(a.at) && a.at.length === 2 && a.at.every(Number.isFinite) ? [clamp(a.at[0], 0, 1600), clamp(a.at[1], 0, 900)] : prev?.at ?? null;
+      const el = { id: String(a.id), layer: Number(a.layer) || 0, desc: String(a.desc || '').slice(0, 400), code: a.code, params, theme: isOpening ? null : key, opening: isOpening || (prev?.opening && !key), stage: isOpening || !!prev?.stage || !!prev?.opening, born: prev?.born ?? batchNo, at, enter: ENTER.includes(a.enter) ? a.enter : prev?.enter || 'fade' };
+      if (!isOpening && !final) {                          // revealed one after another, not all at once
+        el.revealAt = nextReveal();
+        if (prev) { const { was, revealAt, ...seen } = prev; el.was = revealAt > Date.now() ? was : seen; }
+      }
+      live.set(a.id, el);
       latest = a.id; out.added.push(a.id);
     }
     for (const s of patch.set || []) { const e = live.get(s.id); if (e) { const { w, ...ps } = obj(s.params); Object.assign(e.params, ps); out.set.push(s.id); } else out.rejected.push(s.id); }
-    for (const id of patch.remove || []) if (live.delete(id)) out.removed.push(id);
+    for (const id of patch.remove || []) { const e = live.get(id); if (!e) continue; live.delete(id); out.removed.push(id); if (!isOpening && !final) { const { was, revealAt, ...seen } = e; const old = revealAt > Date.now() ? was : seen; if (old) ghosts.push({ el: old, until: nextReveal() }); } }
     if (isOpening) { if (live.size) { try { fs.mkdirSync(path.dirname(cacheFile()), { recursive: true }); fs.writeFileSync(cacheFile(), JSON.stringify([...live.values()])); } catch {} } }
     else if (!partial) {
       feel(patch.feelings, n); if (!final) answersSeen += n;
@@ -296,9 +324,9 @@ export function createDirector({ question: q0 }) {
       formats = {
         patch: zodOutputFormat(z.object({
           feelings: z.object(Object.fromEntries(F.map(f => [f, z.number()]))),
-          ideas: z.array(z.object({ theme: z.string(), n: z.number(), gist: z.string() })),
+          ideas: z.array(z.object({ theme: z.string(), n: z.number(), gist: z.string(), touches: z.array(z.string()) })),
           set: z.array(z.object({ id: z.string(), params: P })),
-          add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), desc: z.string(), code: z.string(), params: P })),
+          add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), at: z.array(z.number()), enter: z.enum(['rise', 'drop', 'slide', 'grow', 'fade']), desc: z.string(), code: z.string(), params: P })),
           draw: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), brief: z.string() })),
           remove: z.array(z.string()), note: z.string(),
         })),
@@ -359,7 +387,7 @@ export function createDirector({ question: q0 }) {
     return { kind: 'idle' };
   }
 
-  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { order.length = 0; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
     tick(done) { if (endsAt && !isFinal && Date.now() > endsAt) { endsAt = 0; settleNow = true; wantFinal = true; sessionMode() ? wake() : pump(done); } },
@@ -378,6 +406,7 @@ export function createDirector({ question: q0 }) {
       return this.status();
     },
     question: () => question,
+    seen: () => answersSeen,
     status: () => ({ mode: mode(), model, question, phase: phase(), settings, effectiveMagnitude: effMag(), secondsLeft: endsAt ? Math.max(0, Math.round((endsAt - Date.now()) / 1000)) : null, answersSeen, concepts, chosen, themes: recorded() ? [] : scene().themes, feelings: { session: total, lately: recent }, atmosphere: atmosphere(), journal: journal.slice(-12), lastError, calls: calls.slice(-20), elements: [...live.values()].map(e => ({ id: e.id, theme: e.theme, layer: e.layer, params: e.params, chars: e.code.length, desc: e.desc })) }),
     reset(fresh) { clear(); if (fresh) { try { fs.unlinkSync(cacheFile()); } catch {} } else loadOpening(); },
   };

@@ -20,11 +20,11 @@ const lanIp = nets.find(a => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test
 const JOIN_URL = process.env.PUBLIC_URL || `http://${lanIp}:${PORT}/`;
 
 const director = createDirector({ question: QUESTION0 });
-let world, version, pending, busy, feed, drafts, clients, metrics, nextId = 1;
+let world, version, pending, busy, feed, drafts, clients, metrics, nextId = 1, seq = 0;
 const sse = new Set();
 function reset() {
   world = createWorld({ K: Number(process.env.DEPTH || 4) });
-  version = 0; pending = []; busy = false; feed = []; drafts = new Map(); clients = new Map();
+  version = 0; seq = 0; pending = []; busy = false; feed = []; drafts = new Map(); clients = new Map();
   resetMetrics(); director.reset();
 }
 function resetMetrics() { metrics = { subs: new Map(), batches: [], rejected: 0, display: {} }; }
@@ -45,7 +45,7 @@ function broadcast(events = [], ids = []) {
   const now = Date.now();
   for (const id of ids) { const s = metrics.subs.get(id); if (s) { s.tSent = now; s.v = version; } }
   const snap = snapshot(world, draftSummary());
-  const msg = `event: state\ndata: ${JSON.stringify({ v: version, t: snap, scene: director.scene(world, snap), ev: events, feed: feed.slice(0, 14), answers: world.answers })}\n\n`;
+  const msg = `event: state\ndata: ${JSON.stringify({ v: version, t: snap, scene: director.scene(world, snap), ev: events, feed: feed.slice(0, 14).map(f => ({ id: f.id, text: f.text, in: f.n <= director.seen() })), answers: world.answers })}\n\n`;
   for (const res of sse) res.write(msg);
 }
 async function drain() {
@@ -55,12 +55,12 @@ async function drain() {
   busy = true;
   try {
     while (pending.length) {
-      const batch = pending.splice(0);
+      const batch = pending.splice(0); for (const b of batch) b.n = ++seq;   // the order answers reach the director, to mark which are in the picture
       const t0 = performance.now();
       const perAnswer = await interpretBatch(batch.map(b => b.text));
       const events = mergeIdeas(world, perAnswer.flat());
       world.answers += batch.length;
-      for (const b of batch) if (!b.quiet) feed.unshift({ id: b.id, text: b.text });
+      for (const b of batch) if (!b.quiet) feed.unshift({ id: b.id, text: b.text, n: b.n });
       feed.length = Math.min(feed.length, 60);
       metrics.batches.push({ size: batch.length, ms: +(performance.now() - t0).toFixed(1) });
       broadcast(events, batch.map(b => b.id));

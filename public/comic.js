@@ -222,10 +222,12 @@ function applyScene(scene) {
     if (!el || el.code !== e.code) {
       let fn = null, err = null; try { fn = compile(e.code); } catch (x) { err = String(x.message); console.warn('element', e.id, err); }
       const cur = el ? el.cur : Object.fromEntries(Object.keys(e.params).map(key => [key, e.base ? e.params[key] : 0]));
-      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : (e.base ? 1 : 0) };
+      // a rewritten element keeps drawing its old self underneath while the new one inks in over it
+      const old = el && el.fn && el.errors <= 3 && el.grow > 0.5 && fn ? el.fn : null;
+      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : (e.base ? 1 : 0), rec: el ? el.rec : 0, old, mix: old ? 0 : 1 };
       els.set(e.id, el);
     }
-    el.tgt = e.params; el.layer = e.layer; el.gone = false;
+    el.tgt = e.params; el.layer = e.layer; el.gone = false; el.at = e.at || null; el.enter = e.enter || 'fade'; el.recT = e.recede || 0;
     for (const key in e.params) if (!(key in el.cur)) el.cur[key] = 0;
   }
   for (const [id, el] of els) if (!seen.has(id)) el.gone = true;       // removed elements shrink away
@@ -259,10 +261,28 @@ function frame(now) {
   for (const [id, el] of order) {
     const kx = 1 - Math.exp(-dt / 2.4);
     for (const key in el.tgt) el.cur[key] += ((el.gone ? 0 : el.tgt[key]) - el.cur[key]) * kx;
-    el.grow += ((el.gone ? 0 : 1) - el.grow) * (1 - Math.exp(-dt / 0.9));
+    el.grow += ((el.gone ? 0 : 1) - el.grow) * (1 - Math.exp(-dt / 1.7));
+    el.rec += ((el.recT || 0) - el.rec) * (1 - Math.exp(-dt / 4));
     if (el.gone && el.grow < 0.01) { els.delete(id); continue; }
     if (!el.fn || el.errors > 3) continue;
-    g.save(); g.globalAlpha = clamp(el.grow * 1.6);
+    g.save();
+    // entrance (and exit, in reverse): each thing arrives in its own way from where it stands
+    const u = 1 - el.grow * el.grow * (3 - 2 * el.grow), ax = el.at ? el.at[0] : 800, ay = el.at ? el.at[1] : 650;
+    let alpha = clamp(el.grow * 1.6);
+    if (u > 0.002) {
+      if (el.enter === 'rise') g.translate(0, u * 340);
+      else if (el.enter === 'drop') g.translate(0, -u * 520);
+      else if (el.enter === 'slide') g.translate((ax < 800 ? -1 : 1) * u * 720, 0);
+      else if (el.enter === 'grow') { const s = Math.max(0.04, 1 - u); g.translate(ax, ay); g.scale(s, s); g.translate(-ax, -ay); }
+    }
+    // a theme the room has stopped voicing recedes: smaller, fainter, moved toward the nearer edge
+    if (el.rec > 0.01) { const s = 1 - 0.42 * el.rec, dx = (ax < 800 ? -ax : 1600 - ax) * 0.5 * el.rec; g.translate(ax + dx, ay); g.scale(s, s); g.translate(-ax, -ay); alpha *= 1 - 0.4 * el.rec; }
+    if (el.old) {
+      el.mix = Math.min(1, el.mix + dt / 1.8);
+      g.globalAlpha = alpha; try { el.old(k, el.cur, t, mood); } catch (x) { el.old = null; }
+      if (el.mix >= 1) el.old = null;
+    }
+    g.globalAlpha = alpha * (el.mix * el.mix * (3 - 2 * el.mix));
     try { el.fn(k, el.cur, t, mood); } catch (x) { if (++el.errors > 3) console.warn('element disabled:', id, x.message); }
     g.restore();
   }
@@ -329,6 +349,8 @@ es.addEventListener('state', msg => {
   const have = new Set([...feedEl.children].map(c => +c.dataset.id)), want = new Set(s.feed.map(f => f.id));
   for (const c of [...feedEl.children]) if (!want.has(+c.dataset.id)) c.remove();
   for (const f of s.feed.slice(0, 9).reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.textContent = f.text; feedEl.prepend(d); }
+  const inPicture = new Set(s.feed.filter(f => f.in).map(f => f.id));       // answers the director has worked into the picture change colour
+  for (const c of feedEl.children) c.classList.toggle('in', inPicture.has(+c.dataset.id));
 });
 es.addEventListener('accept', () => { if (pops.length < 30) pops.push({ x: 300 + Math.random() * 1000, y: 800 + Math.random() * 60, age: 0 }); });
 fetch('/api/config').then(r => r.json()).then(c => {
