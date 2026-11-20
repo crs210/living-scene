@@ -187,6 +187,20 @@ Git: `themes-and-concepts` is the working branch (this zip), `main` the early ba
 
 ## 7. Next directions (from the owner, 2026-11-21)
 
+**Status, later on 2026-11-21.** A first pass at items 1, 2, 3, 4, 8, 11 and 13 is built and was
+checked with one Sonnet session (opening plus two batches, 37 s and 36 s per batch):
+- weak themes recede (smaller, fainter, moved to the nearer edge) and are deleted only when the
+  scene is over-full; opening landmarks are never pruned;
+- the pieces of a reply are revealed one after another (`STAGGER_MS`, default 3500), each with its
+  own entrance (`enter`: rise, drop, slide, grow, fade) from the point where it stands (`at`);
+  a rewritten element inks in over its old self;
+- the prompt now has rules for editing existing elements, making things interact, and letting the
+  mood decide which version of a thing is drawn; "funny hats" put hats on the walker and the
+  dinosaur, and "make them nice" redrew the data centres as planted, lit buildings;
+- answers in the feed turn green once the director has worked them into the picture.
+Not started: 5 (animation option), 6-7 (two-model split, leaner prompt), 9 (developer panel),
+10 (open rooms), 12 (continuous interpretation), 14 (more tone sliders), 15 (load management).
+
 Organised from the owner's notes after watching a Sonnet session and an Opus session. Their own
 words are at the end of this file; where the two differ, their words win.
 
