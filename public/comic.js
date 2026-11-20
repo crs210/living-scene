@@ -12,6 +12,7 @@ const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
 const hash = n => { const s = Math.sin(n * 127.1 + 3.7) * 43758.5453; return s - Math.floor(s); };
 let boil = 0;                     // re-seeds the line wobble a few times a second ("line boil")
 let WOB = 1.7;                    // grows with tension: an agitated room gets a shakier line
+let Q = 1;                        // quality scaler: rises when frames are slow (coarser dots, single ink pass)
 let pass = 0;                     // second ink pass uses a different wobble, so lines look gone-over by hand
 const REG = [2.4, 1.7];           // colour plate printed slightly off the ink plate
 const jit = (q, i) => [q[0] + (hash(i * 12.9898 + (boil + pass * 31) * 78.233 + (q[0] | 0) * 0.37) - 0.5) * 2 * WOB, q[1] + (hash(i * 39.346 + (boil + pass * 31) * 11.135 + (q[1] | 0) * 0.41) - 0.5) * 2 * WOB];
@@ -46,7 +47,7 @@ const k = {
     if (lw > 0) {
       g.strokeStyle = o.ink || INK; g.lineJoin = g.lineCap = 'round';
       trace(pts, true, o.curve, o.still); g.lineWidth = lw; g.stroke();
-      if (lw >= 3 && !o.still) { pass = 1; trace(pts, true, o.curve, false); pass = 0; g.lineWidth = lw * 0.4; g.globalAlpha *= 0.75; g.stroke(); }
+      if (lw >= 3 && !o.still && Q < 1.3) { pass = 1; trace(pts, true, o.curve, false); pass = 0; g.lineWidth = lw * 0.4; g.globalAlpha *= 0.75; g.stroke(); }
     }
     g.restore();
   },
@@ -56,11 +57,12 @@ const k = {
     if (pts.length < 2) return;
     g.save(); g.globalAlpha *= o.a ?? 1; trace(pts, false, o.curve, o.still);
     g.strokeStyle = color; g.lineWidth = lw; g.lineCap = g.lineJoin = 'round'; g.stroke();
-    if (lw >= 4 && !o.still) { pass = 1; trace(pts, false, o.curve, false); pass = 0; g.lineWidth = lw * 0.4; g.globalAlpha *= 0.7; g.stroke(); }
+    if (lw >= 4 && !o.still && Q < 1.3) { pass = 1; trace(pts, false, o.curve, false); pass = 0; g.lineWidth = lw * 0.4; g.globalAlpha *= 0.7; g.stroke(); }
     g.restore();
   },
   // halftone: a dot screen clipped to a polygon; fade 'up' / 'down' shrinks the dots across it
   dots(pts, color, size = 3, gap = 10, o = {}) {
+    gap = Math.max(5, gap) * Q; size *= Q;
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     g.save(); g.globalAlpha *= o.a ?? 1; trace(pts, true, false, true); g.clip(); g.fillStyle = color; g.beginPath();
     let row = 0; for (let y = y0; y <= y1; y += gap * 0.866, row++) {
@@ -80,7 +82,7 @@ const k = {
     if (r < 2 || a <= 0.01) return;
     g.save(); g.globalAlpha *= clamp(a); g.fillStyle = color;
     g.globalAlpha *= 0.55; g.beginPath(); g.arc(x, y, r * 0.42, 0, TAU); g.fill(); g.globalAlpha /= 0.55;
-    g.beginPath(); const gap = 9;
+    g.beginPath(); const gap = 9 * Q;
     for (let rad = r * 0.42, ring = 0; rad < r; rad += gap, ring++) { const s = 3.4 * (1 - (rad - r * 0.42) / (r * 0.58)); if (s < 0.4) break; const n = Math.max(6, Math.floor(TAU * rad / gap)); for (let i = 0; i < n; i++) { const an = (i + (ring % 2) / 2) / n * TAU, px = x + Math.cos(an) * rad, py = y + Math.sin(an) * rad; g.moveTo(px + s, py); g.arc(px, py, s, 0, TAU); } }
     g.fill(); g.restore();
   },
@@ -153,6 +155,7 @@ function compile(code) {
 function applyScene(scene) {
   sceneMode = scene.mode; latestId = scene.latest; phase = scene.phase || 'gathering'; note = scene.note || '';
   if (scene.m) Object.assign(moodT, scene.m);
+  themesNow = scene.themes || []; if (JSON.stringify(scene.concepts || []) !== JSON.stringify(conceptsNow) || scene.chosen !== chosenNow) { conceptsNow = scene.concepts || []; chosenNow = scene.chosen; renderConcepts(); }
   if (scene.settings && !slidersTouched) for (const key of ['abstraction', 'magnitude']) { const inp = document.getElementById(key); if (inp) inp.value = scene.settings[key]; }
   document.getElementById('keys').textContent = (scene.mode.startsWith('recorded') ? 'DEMO SCENE: pre-written, not Claude reading answers' : 'Scene written by ' + scene.mode) + '  ·  S controls · C scene code · F feed · H hide all · R reset';
   const seen = new Set();
@@ -162,7 +165,7 @@ function applyScene(scene) {
     if (!el || el.code !== e.code) {
       let fn = null, err = null; try { fn = compile(e.code); } catch (x) { err = String(x.message); console.warn('element', e.id, err); }
       const cur = el ? el.cur : Object.fromEntries(Object.keys(e.params).map(key => [key, e.base ? e.params[key] : 0]));
-      el = { layer: e.layer, code: e.code, desc: e.desc, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : (e.base ? 1 : 0) };
+      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : (e.base ? 1 : 0) };
       els.set(e.id, el);
     }
     el.tgt = e.params; el.layer = e.layer; el.gone = false;
@@ -184,11 +187,13 @@ const tone = document.createElement('canvas'); tone.width = tone.height = 10;
 // ---------- frame ----------
 let sc = 1, ox = 0, oy = 0, prev = performance.now(), fps = 60;
 const pops = [];
+let slow = 0.016, themesNow = [], conceptsNow = [], chosenNow = null;
 function resize() { const d = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * d; cv.height = innerHeight * d; const m = 0.035 * Math.min(cv.width, cv.height); sc = Math.min((cv.width - 2 * m) / 1600, (cv.height - 2 * m) / 900); ox = (cv.width - 1600 * sc) / 2; oy = (cv.height - 900 * sc) / 2; grainPat = g.createPattern(grain, 'repeat'); tonePat = g.createPattern(tone, 'repeat'); }
 addEventListener('resize', resize); resize();
 
 function frame(now) {
   const dt = Math.min(0.1, (now - prev) / 1000), t = now / 1000; prev = now; fps += (1 / Math.max(dt, 0.001) - fps) * 0.05;
+  slow += (dt - slow) * 0.05; if (slow > 0.036) Q = Math.min(2.2, Q + 0.02); else if (slow < 0.024) Q = Math.max(1, Q - 0.005);
   boil = Math.floor(t * (5 + 7 * mood.tension)); WOB = 1.7 + 3.4 * mood.tension;
   for (const key in mood) mood[key] += (moodT[key] - mood[key]) * (1 - Math.exp(-dt / (phase === 'final' ? 5 : 3)));
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.fillStyle = PAPER; g.fillRect(0, 0, cv.width, cv.height);
@@ -252,8 +257,10 @@ function renderCodePanel() {
   const add = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; d.textContent = text; codeEl.append(d); return d; };
   add('h3', '', `Scene: ${order.length} elements (${sceneMode})   ${fps.toFixed(0)} fps   phase: ${phase}`);
   if (note) add('div', 'new', 'The picture now says: ' + note);
+  if (themesNow.length) add('div', 'el', 'themes  ' + themesNow.map(th => `${th.key} x${th.count} (w ${th.w})`).join('   '));
+  add('div', 'el', `quality scaler ${Q.toFixed(2)}`);
   add('div', 'el', 'atmosphere  ' + Object.entries(moodT).filter(e => Math.abs(e[1]) > 0.02).map(([a, b]) => `${a} ${(+b).toFixed(2)}`).join('  '));
-  for (const [id, el] of order) add('div', id === latestId ? 'new' : 'el', `${id === latestId ? '▶ ' : '  '}${id}  ${JSON.stringify(Object.fromEntries(Object.entries(el.tgt).map(([a, b]) => [a, +(+b).toFixed(2)])))}`);
+  for (const [id, el] of order) add('div', id === latestId ? 'new' : 'el', `${id === latestId ? '▶ ' : '  '}${id}${el.theme ? ' [' + el.theme + ']' : ''}  ${JSON.stringify(Object.fromEntries(Object.entries(el.tgt).map(([a, b]) => [a, +(+b).toFixed(2)])))}`);
   const el = els.get(latestId);
   if (el) { add('h3', '', '').style.marginTop = '2vh'; add('h3', '', `Latest element written: "${latestId}"`); add('div', 'el', el.desc || ''); add('div', '', '\n' + el.code.trim()); }
 }
@@ -278,6 +285,13 @@ document.getElementById('start').onclick = () => setting({ start: +document.getE
 document.getElementById('settle').onclick = () => setting({ settle: true });
 document.getElementById('final').onclick = () => setting({ final: true });
 document.getElementById('newq').onclick = () => { const q = document.getElementById('question').value.trim(); if (q) setting({ question: q }).then(() => { feedEl.innerHTML = ''; document.getElementById('q').textContent = q; }); };
+// opening concepts: the host asks for proposals, then picks one (or types their own)
+function renderConcepts() {
+  const box = document.getElementById('concepts'); box.innerHTML = '';
+  conceptsNow.forEach((cn, i) => { const b = document.createElement('button'); b.className = 'concept' + (cn.title === chosenNow ? ' on' : ''); const h = document.createElement('b'); h.textContent = cn.title; const p = document.createElement('span'); p.textContent = cn.pitch; b.append(h, p); b.onclick = () => setting({ concept: i }); box.append(b); });
+}
+document.getElementById('propose').onclick = () => setting({ propose: true });
+document.getElementById('own').onclick = () => { const v = document.getElementById('ownconcept').value.trim(); if (v) setting({ concept: v }); };
 const EXAMPLES = ['Honestly I just have a bad feeling about where this ends up', 'I worry hackers will use it to break into everything, but I hope it helps people understand each other', 'Cybersecurity. Every lock we rely on is going to fail', 'Excited about curing diseases, though my kids may never find jobs'];
 addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
@@ -291,5 +305,5 @@ addEventListener('keydown', e => {
 });
 const qs = new URLSearchParams(location.search);
 for (const c of ['bare', 'nofeed', 'code']) if (qs.has(c)) document.body.classList.add(c);
-window.comicDiag = () => ({ fps: Math.round(fps), els: order.map(([id, el]) => [id, el.errors]), mode: sceneMode });
+window.comicDiag = () => ({ fps: Math.round(fps), Q: +Q.toFixed(2), phase, themes: themesNow.map(th => th.key + ':' + th.count), els: order.map(([id, el]) => [id, el.errors]), mode: sceneMode });
 requestAnimationFrame(frame);
