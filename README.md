@@ -72,6 +72,6 @@ More detail:
 npm test
 ```
 
-43 checks of the whole pipeline in under a minute, with scripted replies: no key, no cost. They
-also run on GitHub for every push. They cannot tell you whether a picture is any good; for that,
+43 checks of the whole pipeline in under a minute, with scripted replies: no key, no cost. Run
+them before every push. They cannot tell you whether a picture is any good; for that,
 play the demo, or run with a key and look.
