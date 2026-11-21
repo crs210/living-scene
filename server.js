@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
 
   // ---- recorded sessions: replay one with no model, or keep the current one as a demo ----
   if (p === '/api/demo') {
-    const dir = path.join(ROOT, 'demos'), names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)) : [];
+    const dir = path.join(ROOT, 'demos'), names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).sort((x, y) => fs.statSync(path.join(dir, y + '.json')).mtimeMs - fs.statSync(path.join(dir, x + '.json')).mtimeMs) : [];   // newest first: the default demo is the latest recording
     if (!POST) return json(res, 200, { demos: names });
     if (!isLocal(req)) return json(res, 403, {});
     const b = await body(req), safe = String(b.save || b.name || names[0] || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);

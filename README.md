@@ -10,7 +10,7 @@ fixed comic-style drawing kit, and the browser animates between states.
 
 ```
 node server.js          # Node 20 or newer; nothing to install for the default mode
-npm test                # self-check: 35 checks of the plumbing, about 35 seconds, no model needed
+npm test                # self-check: 41 checks of the plumbing, about 45 seconds, no model needed
 ```
 
 - Display (projector, on the computer running the app): http://localhost:3000/comic
@@ -25,12 +25,15 @@ Display keys: `0` play the recorded demo, `S` controls, `D` director panel, `C` 
 1. **The question drives the opening.** The host presses *Propose opening scenes*; the director
    offers four stages (literal, metaphorical, surreal, nearly empty). The host picks one or types
    their own, and it is drawn as 6 to 8 elements. The opening is a stage, not the answer.
-2. **Answers arrive in batches.** Everything received in a second goes together; anything arriving
+2. **Two speeds.** The second an answer is accepted the app itself, with no model, nudges the mood and,
+   if the answer plainly repeats an idea already in the picture, grows and flashes that element.
+   Everything that needs judgement or drawing goes to the director at its own pace.
+3. **Answers reach the director in batches.** Everything received in a second goes together; anything arriving
    while the director is busy waits for the next request. Nothing stale is queued.
-3. **The director replies with:** nine feelings; which theme each answer joins and which existing
-   elements it touches; new numbers for elements; new or rewritten elements as code; removals; one
-   sentence on what the picture now says.
-4. **The app does the rest:**
+4. **The director replies with:** nine feelings; which theme each answer joins and which existing
+   elements it touches; new numbers for elements; new or rewritten elements as code; removals; an optional
+   camera move (pull back or close in); one sentence on what the picture now says.
+5. **The app does the rest:**
    - feelings become atmosphere (light, warmth, rain, mist, wind, decay, bloom, tension), and every
      element is written to show its own wear and flourishing from it;
    - each theme's share of the room is fed to its elements as `p.w`, so repeats grow by themselves;
@@ -40,7 +43,7 @@ Display keys: `0` play the recorded demo, `S` controls, `D` director panel, `C` 
    - an idea that is voiced again makes its element pop and grow on the spot;
    - the director is told what is piled on top of what and where open ground remains, and may add
      only a few brand-new elements per batch, so most changes are rewrites that combine ideas.
-5. **The session has phases:** upheaval (early answers must rewrite the opening), building,
+6. **The session has phases:** upheaval (early answers must rewrite the opening), building,
    settling, and one final composed image that is held and saved to `sessions/`.
 
 An element is `{ id, theme, layer, at, enter, desc, code, params }`. `code` is the body of
@@ -49,12 +52,12 @@ An element is `{ id, theme, layer, at, enter, desc, code, params }`. `code` is t
 ## The recorded demo
 
 Press `0` on the display (or *Play demo* in the controls) to replay a recorded session on a timer:
-an opening, then three batches of four answers, about 25 seconds, with no model running. It shows
+an opening, then three batches of answers, about half a minute, with no model running. It shows
 the answers arriving, turning green, and the picture changing piece by piece. The display says it
 is a replay while it runs.
 
-- The demos are real Claude Sonnet sessions recorded on 2026-11-21, replayed as written. `demos/ai-latest.json`
-  (a harbour town; played by default) and the earlier `demos/ai-sea.json`.
+- The demos are real Claude Sonnet sessions recorded on 2026-11-21, replayed as written. The newest file in
+  `demos/` plays by default (`ai-two-speed`: a two-speed worker, with a camera move).
 - Every session is recorded as it runs. `POST /api/demo {"save":"name"}` keeps the current one as
   `demos/name.json`; `POST /api/demo {"name":"name"}` replays it; finished sessions in `sessions/`
   carry the same recording.
@@ -65,7 +68,7 @@ is a replay while it runs.
 
 | Mode | How | Notes |
 |---|---|---|
-| Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. Either one worker does everything, or a reader (`--role read`) plus several cartoonists (`--role draw`). See `HANDOFF.md` for the worker briefs. |
+| Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. One worker in two steps (`--role solo`: a quick read of each batch, then the drawings one at a time, new answers always read first), one worker doing a whole batch per reply (no role), or a reader (`--role read`) plus several cartoonists (`--role draw`). Briefs beyond a round's allowance wait in a backlog; nothing is dropped. See `HANDOFF.md` for the worker briefs. |
 | API | `ANTHROPIC_API_KEY` set | Automatic: a fast pass (feelings, themes, numbers, briefs), then one request per drawing in parallel. `DIRECTOR_MODEL` reads the room, `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). **Never run with a real key.** |
 | Mock | `DIRECTOR_MOCK=1` | Canned replies through the API path. Tests plumbing only. |
 
@@ -108,7 +111,10 @@ The controls work only at `localhost` on the computer running the app.
 ## Limitations
 
 **Speed**
-- One Sonnet worker takes 35 to 50 seconds from a batch of answers to its picture.
+- Repeats and a first mood shift are instant (no model).
+- One Sonnet worker, whole batch per reply: 35 to 50 seconds from answers to picture.
+- One Sonnet worker in two steps: answers read in 15 to 30 seconds, then one drawing every 14 to 21 seconds;
+  eight drawings took about two minutes to all arrive.
 - Reader plus cartoonists: answers are read in 12 to 15 seconds; each drawing then takes 12 to 44.
 - These are Claude Code stand-in timings. Real API speed has never been measured.
 
