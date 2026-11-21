@@ -3,7 +3,7 @@
 // What the model decides                       What the app does with it
 //   feelings in this batch (nine of them)   ->  blended into the atmosphere: light, colour, weather,
 //                                               wear and bloom across the whole panel
-//   ideas: which THEME each answer joins    ->  a running tally. An element's weight (p.w) follows its
+//   ideas: which THEME each answer joins    ->  a running tally, and which answers show as in the picture. An element's weight (p.w) follows its
 //                                               theme's share of the room, so repeats grow by themselves;
 //                                               themes the room drops recede, and are pruned only when full
 //   set / add / remove                      ->  eased; revealed one piece at a time, each with an entrance
@@ -20,34 +20,56 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { FEELINGS, F, SYSTEM, abstractionText, PHASE_TEXT } from './prompt.js';
-import { matchTheme, leanOf } from './instant.js';
+import { matchTheme, sameAnswer, leanOf } from './instant.js';
 import { layoutReport } from './layout.js';
 import { atmosphereFrom } from './atmosphere.js';
 import { callModel, mockReply } from './model.js';
 
 export { FEELINGS };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+const lc = s => String(s).toLowerCase().trim();
+const keyOf = s => lc(s || '').replace(/\s+/g, '-').slice(0, 40);     // a theme's key, as the tally stores it
 const MAX_ARRIVALS = 6;                // elements beyond the opening; past that the weakest quiet theme gives way
 const FULL_FRAME = 9;                  // with this many elements in all, nothing brand new may be added: ideas must go into what exists
 
 export function createDirector({ question: q0 }) {
   let question = q0;
   const live = new Map();                        // id -> element
-  const themes = new Map();                      // key -> { count, born, last, gist }
+  const themes = new Map();                      // key -> { count, born, last, gist, touches (ids of elements its answers changed) }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let camera = { zoom: 1, focus: [800, 560] };   // the view: below 1 pulls back, above 1 closes in on the focus point
   let instantLog = [];                           // what the app did by itself the moment an answer arrived
+  // Which idea each answer went into, so the answers list can show the ones the picture has taken in.
+  let placed = new Map();     // answer text -> its theme ('*' when a reply did not say, as in older recordings: shown once read)
+  let guessed = new Map();    // answers the fast speed already counted toward a theme, so the director's count does not repeat them
+  let shown = new Set();      // answers already shown as in the picture; they stay that way
+  let owed = new Map();       // element id -> when a drawing of it was asked for that has not landed yet
   // THE FAST SPEED. No model: runs the second an answer is accepted. It only does small, self-limiting things:
   // a first guess at the mood (the director's reading replaces it), and, when the answer plainly repeats an idea
-  // already in the picture, one more count for that theme, which makes its element pop and grow at once.
+  // already in the picture (it names the theme, or says the same as an earlier answer), one more count for that
+  // theme, which makes its element pop and grow at once.
   function instant(texts) {
     for (const text of texts.slice(0, 60)) {
       const { v, lean } = leanOf(text);
       for (const x in lean) if (lean[x] > recent[x]) recent[x] += (lean[x] - recent[x]) * 0.08;
-      const key = matchTheme(text, themes.keys()), t = key && themes.get(key);
-      if (t) { t.count++; t.pre = (t.pre || 0) + 1; t.last = batchNo; }
+      const key = matchTheme(text, themes.keys()) || alike(text), t = key && themes.get(key);
+      if (t) { t.count++; t.last = batchNo; guessed.set(lc(text), key); placed.set(lc(text), key); }
       instantLog.push({ text: text.slice(0, 80), theme: key, v: +v.toFixed(2) }); if (instantLog.length > 10) instantLog.shift();
     }
+  }
+  // the theme of an earlier answer that says the same thing as this one
+  function alike(text) { let hit = null; for (const [txt, key] of placed) if (key !== '*' && themes.has(key) && sameAnswer(text, txt)) hit = key; return hit; }
+  // Is this answer in the picture yet? Yes once an element of its idea (or one its idea changed) is on show and
+  // no drawing for that element is still on its way.
+  function placement(text) {
+    const key = placed.get(lc(text)); if (!key) return { in: false };
+    if (key === '*') return { in: true };
+    const t = themes.get(key); if (!t) return { in: false };
+    if (!shown.has(lc(text))) {
+      const now = Date.now(), coming = id => owed.has(id) && now - owed.get(id) < 180000;
+      for (const e of live.values()) if ((e.theme === key || t.touches?.includes(e.id)) && !(e.revealAt > now) && !coming(e.id)) { shown.add(lc(text)); break; }
+    }
+    return { in: shown.has(lc(text)), n: t.count };
   }
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
   let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, issuedNew = 0, ghosts = [], revealClock = 0;
@@ -66,9 +88,9 @@ export function createDirector({ question: q0 }) {
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
   const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';
-  const drawModel = process.env.DRAW_MODEL || model;
+  const drawModel = process.env.DRAW_MODEL || model;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
   const API_CAP = Number(process.env.MAX_API_CALLS || 500);   // requests to the model per session, so a busy or hostile room cannot run up a bill
-  let apiCalls = 0, capHit = false;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
+  let apiCalls = 0, capHit = false;
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
   const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
   const sessionMode = () => !hasKey();
@@ -112,7 +134,7 @@ export function createDirector({ question: q0 }) {
   }
 
   // ---- atmosphere: nine feelings -> the drivers the renderer and every element read ----
-  const atmosphere = () => atmosphereFrom(recent, total, phase(), settings.magnitude);
+  const atmosphere = () => atmosphereFrom(recent, total, phase(), settings.magnitude, answersSeen);
   function feel(f, n) {
     if (!f) return;
     const step = (0.35 + 0.45 * settings.magnitude) * (0.5 + 0.5 * (1 - Math.exp(-Math.max(1, n) / 3)));
@@ -151,7 +173,7 @@ export function createDirector({ question: q0 }) {
     const pictured = new Set([...live.values()].map(e => e.theme).filter(Boolean));
     const owed = [...themes].filter(([k2, t]) => !pictured.has(k2) && t.count >= 2).sort((a, b) => b[1].count - a[1].count).map(([k2, t]) => `${k2} (${t.count})`).join(', ');
     const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply, of which at most ${newCap(answers.length)} may be brand new (the rest must be rewrites that work the new ideas into what exists); move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.${owed ? `\nOWED A PICTURE: these themes have been voiced more than once and still have no element: ${owed}. Draw them before anything voiced only once.` : ''}` + layout();
-    const list = `New answers in this batch (${answers.length}):\n${answers.map(a => `- ${a}`).join('\n')}`;
+    const list = `New answers in this batch (${answers.length}), numbered for "answers":\n${answers.map((a, i) => `${i + 1}. ${a}`).join('\n')}`;
     if (kind === 'fast') return { system: SYSTEM, user: head + controls + '\n\n' + list + '\n\nFAST PASS: be quick. Write no code and leave "add" empty. Do everything else now: feelings, ideas with "touches", "set" (move numbers), "remove", "note". Then, for each new or rewritten element you want, add a brief to a "draw" list: { "id", "theme", "layer", "brief" }. To change an existing element use its id. Each brief goes to a separate cartoonist who sees the scene list but not your thoughts, so say in two or three sentences: what it is, in which mood (grim, idealised, playful), where it stands and how big, what it is attached to or does to its neighbours, and what its numbers mean.' };
     if (kind === 'draw') return { system: SYSTEM, user: head + controls + '\n\n' + list + `\n\nDRAW PASS: write exactly ONE element, returned alone in "add" (with "at" and "enter"), for this brief:\n${JSON.stringify(extra)}\n${live.get(extra?.id) ? `This REWRITES the existing element "${extra.id}": keep what it shows and add the change. Its current code:\n${live.get(extra.id).code}\n` : ''}Leave every other list empty and all feelings 0.` };
     return { system: SYSTEM, user: head + controls + '\n\n' + list };
@@ -167,11 +189,26 @@ export function createDirector({ question: q0 }) {
     if (!replaying) tape.push({ answers: isOpening || final || partial ? [] : [...lastBatch], opts: { opening: isOpening, final, partial, answers: n }, patch: (({ _job, ...p }) => p)(patch) });
     if (!isOpening && !partial) {
       batchNo++;
+      const texts = lastBatch, listed = (patch.ideas || []).some(i => Array.isArray(i.answers) && i.answers.length);
+      // What this reply really changes: elements it redraws (now or by brief), and elements whose numbers it moves.
+      const ids = list => new Set((Array.isArray(list) ? list : []).map(x => String(x?.id ?? '')));
+      const redrawn = new Set([...ids(patch.add), ...ids(patch.draw)]), moved = ids(patch.set);
       for (const i of patch.ideas || []) {
-        const key = String(i.theme || '').toLowerCase().trim().replace(/\s+/g, '-').slice(0, 40); if (!key) continue;
-        const t = themes.get(key) || { count: 0, born: batchNo, gist: String(i.gist || key).slice(0, 60) };
-        t.count += Math.max(0, Math.max(1, Math.min(n, Number(i.n) || 1)) - (t.pre || 0)); t.pre = 0; t.last = batchNo; themes.set(key, t);   // repeats the app already counted are not counted twice
+        const key = keyOf(i.theme); if (!key) continue;
+        const t = themes.get(key) || { count: 0, born: batchNo, gist: String(i.gist || key).slice(0, 60), touches: [] };
+        const nums = Array.isArray(i.answers) ? [...new Set(i.answers.map(Number))].filter(x => texts[x - 1] !== undefined) : [];
+        if (nums.length) {
+          // The director says which answers voiced this idea. Count them, except any the fast speed already counted
+          // here, and take back any the fast speed had counted toward a different theme.
+          for (const x of nums) { const txt = lc(texts[x - 1]), g = guessed.get(txt); if (g !== key) { t.count++; if (g && themes.has(g)) themes.get(g).count = Math.max(0, themes.get(g).count - 1); } placed.set(txt, key); }
+        } else t.count += Math.max(0, Math.max(1, Math.min(n, Number(i.n) || 1)) - texts.filter(x => guessed.get(lc(x)) === key).length);
+        // An idea "touches" the elements it changes. Only those really redrawn for it count (or, if none is, those
+        // whose numbers moved), so its answers turn green when there is something to point at in the picture.
+        if (Array.isArray(i.touches)) { const named = i.touches.map(String), real = named.filter(id => redrawn.has(id)); t.touches = [...new Set([...(t.touches || []), ...(real.length ? real : named.filter(id => moved.has(id)))])].slice(-8); }
+        t.last = batchNo; themes.set(key, t);
       }
+      if (!listed) for (const x of texts) if (!placed.has(lc(x))) placed.set(lc(x), '*');
+      for (const x of texts) guessed.delete(lc(x));
     }
     // Honour the allowance the director was told when the request went out, even if the phase has moved on since.
     const cap = isOpening ? 12 : final ? 3 : partial ? 1 : Math.max(maxAdd(n), issuedCap); issuedCap = 0;
@@ -179,7 +216,7 @@ export function createDirector({ question: q0 }) {
     for (const a of (patch.add || []).slice(cap)) out.rejected.push((a?.id || '?') + ' (over the allowance of ' + cap + ')');
     for (const a of (patch.add || []).slice(0, cap)) {
       if (!a || typeof a.code !== 'string' || !a.id || a.code.length > 6000) { out.rejected.push(a?.id || '?'); continue; }
-      const prev = live.get(a.id), key = a.theme ? String(a.theme).toLowerCase().trim().replace(/\s+/g, '-') : (prev?.theme ?? null);
+      const prev = live.get(a.id), key = a.theme ? keyOf(a.theme) : (prev?.theme ?? null);
       if (key && !themes.has(key)) themes.set(key, { count: 1, born: batchNo, last: batchNo, gist: key });
       const { w, ...params } = { ...(prev?.params || {}), ...obj(a.params) };
       if (capped && !prev && ++newCount > newAllowed) { out.rejected.push(a.id + ' (more than ' + newAllowed + ' brand-new elements: work it into an existing one)'); continue; }
@@ -190,14 +227,13 @@ export function createDirector({ question: q0 }) {
         el.revealAt = nextReveal();
         if (prev) { const { was, revealAt, ...seen } = prev; el.was = revealAt > Date.now() ? was : seen; }
       }
-      live.set(a.id, el);
+      live.set(a.id, el); owed.delete(el.id);
       latest = a.id; out.added.push(a.id); if (prev) rewritten.add(a.id);
     }
     for (const s of patch.set || []) { const e = live.get(s.id); if (e) { const { w, ...ps } = obj(s.params); Object.assign(e.params, ps); out.set.push(s.id); } else out.rejected.push(s.id); }
     for (const id of patch.remove || []) { const e = live.get(id); if (!e) continue; live.delete(id); out.removed.push(id); if (!isOpening && !final) { const { was, revealAt, ...seen } = e; const old = revealAt > Date.now() ? was : seen; if (old) ghosts.push({ el: old, until: nextReveal() }); } }
     if (isOpening) { if (live.size && !replaying) { try { fs.mkdirSync(path.dirname(cacheFile()), { recursive: true }); fs.writeFileSync(cacheFile(), JSON.stringify([...live.values()])); } catch {} } }
     else if (!partial) {
-      for (const t of themes.values()) t.pre = 0;
       feel(patch.feelings, n); if (!final) answersSeen += n;
       if (patch.note) journal.push({ note: String(patch.note).slice(0, 300), n });
       if (final) {
@@ -221,8 +257,18 @@ export function createDirector({ question: q0 }) {
     return out;
   }
 
+  // Nothing is thrown away: briefs within this round's allowance go to the front of the drawing queue; the rest
+  // wait in the backlog behind anything already queued, and are drawn when a cartoonist is free.
+  function queueBriefs(draw, answers, cap, newOk) {
+    const all = (Array.isArray(draw) ? draw : []).filter(d => d && d.id), now = [], later = []; let fresh = 0;
+    for (const d of all) { const isNew = !live.has(d.id); if (now.length < cap && (!isNew || ++fresh <= newOk)) now.push(d); else later.push(d); }
+    drawQueue = drawQueue.filter(q => !all.some(d => d.id === q.brief.id));          // a newer brief for the same element replaces the queued one
+    drawQueue = [...now.map(d => ({ brief: d, answers })), ...drawQueue, ...later.map(d => ({ brief: d, answers, backlog: true }))].slice(0, 24);
+    for (const d of all) owed.set(String(d.id), Date.now());
+    return { now: now.map(d => d.id), later: later.map(d => d.id) };
+  }
+
   // ---- API mode: a fast pass (feelings, themes, numbers) lands first; drawings follow in parallel ----
-  // Canned replies with realistic delays, to test batching and the fast-then-draw pipeline without a key.
   // One request to the director model (or its canned stand-in). Counts toward the spending cap.
   async function ask(kind, answers, extra) {
     if (apiCalls >= API_CAP) { capHit = true; throw new Error('spending cap reached (' + API_CAP + ' requests this session; raise MAX_API_CALLS or reset)'); }
@@ -245,17 +291,25 @@ export function createDirector({ question: q0 }) {
     if (busy || !hasKey() || !live.size) return;
     busy = true;
     await guard('batch', async () => {
-      while (queue.length || wantFinal) {
+      // new answers are always read before more drawing; the backlog is drawn when there is nothing new to read
+      for (;;) {
         if (queue.length && !isFinal) {
-          const batch = queue.splice(0); lastBatch = batch;
-          const fast = await ask('fast', batch); if (!fast) continue;
+          const batch = queue.splice(0), cap = maxAdd(batch.length), newOk = newCap(batch.length); lastBatch = batch; inFlight = batch.length;
+          let fast; try { fast = await ask('fast', batch); } catch (e) { queue.unshift(...batch); throw e; }   // a failed read is tried again with the next batch
+          if (!fast) continue;
           apply({ ...fast, add: [] }, { answers: batch.length }); done();
-          await Promise.all((fast.draw || []).slice(0, maxAdd(batch.length)).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]], _job: r._job }, { partial: true }); done(); } })));
+          queueBriefs(fast.draw, batch, cap, newOk);
+          await drawRound(cap, done);
         } else if (wantFinal) { wantFinal = false; const p = await ask('final'); if (p) { apply(p, { final: true }); done(); } }
-        else queue.length = 0;
+        else if (drawQueue.length && !isFinal) await drawRound(maxAdd(0), done);
+        else break;
       }
     });
     busy = false;
+  }
+  async function drawRound(n, done) {
+    const round = drawQueue.splice(0, Math.max(1, n));
+    await Promise.all(round.map(d => guard('draw ' + d.brief.id, async () => { const r = await ask('draw', d.answers, d.brief); if (r?.add?.[0]) { apply({ add: [r.add[0]], _job: r._job }, { partial: true }); done(); } })));
   }
   // Answers arriving while a request is in flight wait and go together in the next batch.
   function onBatch(texts, done) {
@@ -267,9 +321,7 @@ export function createDirector({ question: q0 }) {
   }
   // session mode: hand the next piece of work to whoever is acting as director
   const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' || kind === 'fast' ? { answers } : {}), ...p }; };
-  // role 'all' (default): one director does everything, a whole batch per reply.
-  // role 'read': feelings, themes, numbers and briefs only (fast). role 'draw': one drawing per request; run several at once.
-  // role 'all': one director, a whole batch per reply (drawings included).
+  // role 'all' (default): one director, a whole batch per reply (drawings included).
   // role 'solo': one director, two speeds: each batch gets a quick read first (feelings, themes, numbers, briefs),
   //              then the drawings are done one at a time, with new answers always read before more drawing.
   // role 'read' / 'draw': the same split across several workers.
@@ -296,9 +348,9 @@ export function createDirector({ question: q0 }) {
     return { kind: 'idle' };
   }
 
-  function clear() { apiCalls = 0; capHit = false; camera = { zoom: 1, focus: [800, 560] }; instantLog = []; playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { placed = new Map(); guessed = new Map(); shown = new Set(); owed = new Map(); apiCalls = 0; capHit = false; camera = { zoom: 1, focus: [800, 560] }; instantLog = []; playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
-    scene, prompt, apply, open, onBatch, next,
+    scene, prompt, apply, open, onBatch, next, placement,
     // Replay a recorded session ({ question, chosen, tape }) on a timer. No model is involved.
     async play(demo, { onAnswers = () => {}, done = () => {}, gap = 1200 } = {}) {
       clear();
@@ -324,14 +376,9 @@ export function createDirector({ question: q0 }) {
       if (b.fast) {
         const cap = Math.max(maxAdd(inFlight), issuedCap), answers = lastBatch, newOk = Math.max(newCap(inFlight), issuedNew);
         const out = apply({ ...patch, add: [] }, {});
-        // Nothing is thrown away: briefs within this round's allowance are drawn first; the rest wait in the
-        // backlog behind anything already queued, and are drawn when a cartoonist is free.
-        const all = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id), now = [], later = []; let fresh = 0;
-        for (const d of all) { const isNew = !live.has(d.id); if (now.length < cap && (!isNew || ++fresh <= newOk)) now.push(d); else later.push(d); }
-        drawQueue = drawQueue.filter(q => !all.some(d => d.id === q.brief.id));          // a newer brief for the same element replaces the queued one
-        drawQueue = [...now.map(d => ({ brief: d, answers })), ...drawQueue, ...later.map(d => ({ brief: d, answers, backlog: true }))].slice(0, 24);
+        const q = queueBriefs(patch.draw, answers, cap, newOk);
         wakeDraw(); wake();
-        return { ...out, toDraw: now.map(d => d.id), backlog: later.map(d => d.id) };
+        return { ...out, toDraw: q.now, backlog: q.later };
       }
       return apply(patch, { opening: !!b.opening, final: !!b.final });
     },
@@ -352,7 +399,6 @@ export function createDirector({ question: q0 }) {
       return this.status();
     },
     question: () => question,
-    seen: () => answersSeen,
     status: () => ({ mode: mode(), model, question, phase: phase(), settings, effectiveMagnitude: effMag(), secondsLeft: endsAt ? Math.max(0, Math.round((endsAt - Date.now()) / 1000)) : null, answersSeen, concepts, chosen, themes: scene().themes, feelings: { session: total, lately: recent }, atmosphere: atmosphere(), journal: journal.slice(-12), lastError, calls: calls.slice(-20), elements: [...live.values()].map(e => ({ id: e.id, theme: e.theme, layer: e.layer, params: e.params, chars: e.code.length, desc: e.desc })) }),
     reset(fresh) { clear(); if (fresh) { try { fs.unlinkSync(cacheFile()); } catch {} } else loadOpening(); },
   };

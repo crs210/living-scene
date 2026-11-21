@@ -56,7 +56,7 @@ ${F.map(f => `  ${f}: ${FEELINGS[f]}`).join('\n')}
 Report how strongly each is present in the batch, 0..1. They are not opposites; a room can hold several at once.
 
 THEMES (how repetition works)
-Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched and how many answers in the batch voiced it. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. For each idea also list "touches": the ids of the existing elements that idea changes (may be empty). When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
+Sort every answer into a theme: a short lowercase key for the underlying idea ("jobs", "being-watched", "family-time"). REUSE an existing key whenever an answer is about the same thing in different words; only coin a new key for a new idea. Keep themes broad: "wherever my kids are", "loud and full of cousins" and "people, not a place" are ONE theme. A whole session should end with five to eight themes, not twenty. Report each theme touched, how many answers in the batch voiced it ("n"), and which ones ("answers": their numbers in the batch list). Leave out an answer that fits no idea; it will not be shown as part of the picture. The app tallies them and feeds each theme's share back to its elements as p.w, so the tenth person to say a thing makes it loom without you redrawing it. Give every element you add the theme it serves. For each idea also list "touches": the ids of the existing elements that idea changes (may be empty). When a batch holds more ideas than you may draw, draw the ones most people voiced, whether they are hopeful or not; do not spend the allowance on the pleasant ones.
 
 TURNING THOUGHTS INTO PICTURES
 The setting is a stage, not a cage. Ask of each idea: what would have to HAPPEN to this place for a stranger to feel that? Then draw the event, big.
@@ -112,7 +112,7 @@ No new ideas. Compose one balanced picture: what the room felt most is largest a
 
 REPLY FORMAT: only JSON.
 { "feelings": { ${F.map(f => `"${f}": 0`).join(', ')} },
-  "ideas": [ { "theme": "key", "n": 1, "gist": "five words", "touches": [ "id" ] } ],
+  "ideas": [ { "theme": "key", "n": 2, "answers": [ 1, 4 ], "gist": "five words", "touches": [ "id" ] } ],
   "set": [ { "id", "params": [ { "name", "value" } ] } ],
   "add": [ { "id", "theme", "layer", "box": [ x, y, w, h ], "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
   "remove": [ "id" ],

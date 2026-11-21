@@ -61,7 +61,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - prev) / 1000), t = now / 1000; prev = now; fps += (1 / Math.max(dt, 0.001) - fps) * 0.05;
   slow += (dt - slow) * 0.05; if (slow > 0.05) pen.Q = Math.min(1.8, pen.Q + 0.01); else if (slow < 0.034) pen.Q = Math.max(1, pen.Q - 0.01);
   pen.boil = Math.floor(t * (5 + 7 * mood.tension)); pen.WOB = 1.7 + 3.4 * mood.tension;
-  for (const key in mood) mood[key] += (moodT[key] - mood[key]) * (1 - Math.exp(-dt / (phase === 'final' ? 5 : 3)));
+  for (const key in mood) mood[key] += (moodT[key] - mood[key]) * (1 - Math.exp(-dt / (key === 'rain' ? 12 : phase === 'final' ? 5 : 3)));   // rain comes in slowly
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.fillStyle = PAPER; g.fillRect(0, 0, cv.width, cv.height);
   g.setTransform(sc, 0, 0, sc, ox, oy);
   g.save(); g.beginPath(); g.rect(0, 0, 1600, 900); g.clip();
@@ -93,8 +93,8 @@ function frame(now) {
     // a theme the room has stopped voicing recedes: smaller, fainter, moved toward the nearer edge
     if (el.rec > 0.01) { const s = 1 - 0.42 * el.rec, dx = (ax < 800 ? -ax : 1600 - ax) * 0.5 * el.rec; g.translate(ax + dx, ay); g.scale(s, s); g.translate(-ax, -ay); alpha *= 1 - 0.4 * el.rec; }
     // repeats are made visible by the display itself: an arrival is scaled by its theme's share of the room,
-    // and pops with a burst the moment the idea is voiced again
-    if (el.theme && !el.stage) { const s = (0.84 + 0.3 * (el.cur.w ?? 0.5)) * (1 + 0.13 * Math.sin(Math.PI * (el.bump || 0))); g.translate(ax, ay); g.scale(s, s); g.translate(-ax, -ay); }
+    // and pops with a burst the moment the idea is voiced again (from about 0.8x for a passing remark to 1.24x)
+    if (el.theme && !el.stage) { const s = (0.76 + 0.48 * (el.cur.w ?? 0.5)) * (1 + 0.18 * Math.sin(Math.PI * (el.bump || 0))); g.translate(ax, ay); g.scale(s, s); g.translate(-ax, -ay); }
     if (el.bump > 0) { g.save(); g.globalAlpha = alpha * el.bump; k.burst(ax, ay - 150, 70 + 90 * (1 - el.bump), 34 + 50 * (1 - el.bump), 11, '#f6c544', { lw: 4 }); g.restore(); el.bump = Math.max(0, el.bump - dt / 1.1); }
     if (el.old) {
       el.mix = Math.min(1, el.mix + dt / 1.8);
@@ -136,7 +136,7 @@ function frame(now) {
 function atmosphere(t) {
   const M = mood;
   if (M.mist > 0.03) { g.fillStyle = '#d9d2c4'; for (let i = 0; i < 6; i++) { g.globalAlpha = M.mist * 0.2; const x = ((hash(i + 3) * 2400 + t * (8 + i * 3)) % 2600) - 500, y = 420 + i * 70 + Math.sin(t * 0.2 + i) * 20; g.beginPath(); g.ellipse(x, y, 520, 46 + i * 6, 0, 0, TAU); g.fill(); } g.globalAlpha = 1; }
-  if (M.rain > 0.03) {
+  if (M.rain > 0.06) {
     const n = M.rain * 190, sl = 14 + M.wind * 60 + M.storm * 20; g.strokeStyle = '#e4ecff'; g.lineWidth = 2.2; g.globalAlpha = 0.35 + 0.35 * M.rain; g.beginPath();
     for (let i = 0; i < n; i++) { const x = ((hash(i) * 2000 + t * (120 + hash(i + 5) * 160) * (0.2 + M.wind)) % 2000) - 200, y = ((hash(i + 9) * 1100 + t * (950 + hash(i + 2) * 500)) % 1100) - 100; g.moveTo(x, y); g.lineTo(x + sl, y + 52); }
     g.stroke(); g.globalAlpha = 1;

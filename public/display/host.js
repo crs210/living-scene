@@ -37,10 +37,11 @@ es.addEventListener('state', msg => {
   if (s.scene && s.scene.m) moodT.wind = Math.min(1, (s.scene.m.wind || 0) + 0.3 * stir);
   const have = new Set([...feedEl.children].map(c => +c.dataset.id)), want = new Set(s.feed.map(f => f.id));
   for (const c of [...feedEl.children]) if (!want.has(+c.dataset.id)) c.remove();
-  for (const f of [...s.feed].reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.textContent = f.text; feedEl.prepend(d); }
-  const inPicture = new Set(s.feed.filter(f => f.in).map(f => f.id));       // answers the director has worked into the picture change colour
-  for (const c of feedEl.children) c.classList.toggle('in', inPicture.has(+c.dataset.id));
-  document.getElementById('tally').textContent = s.answers ? s.answers + (s.answers === 1 ? ' answer' : ' answers') + ' so far  ·  green = in the picture' : 'waiting for the first one';
+  for (const f of [...s.feed].reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.append(f.text, document.createElement('b')); feedEl.prepend(d); }
+  // an answer turns green once the picture shows its idea; "x3" marks an idea three people have now voiced
+  const byId = new Map(s.feed.map(f => [f.id, f]));
+  for (const c of feedEl.children) { const f = byId.get(+c.dataset.id); if (!f) continue; c.classList.toggle('in', !!f.in); c.lastChild.textContent = f.n > 1 ? '×' + f.n : ''; }
+  document.getElementById('tally').textContent = s.answers ? s.answers + (s.answers === 1 ? ' answer' : ' answers') + ', ' + (s.drawn || 0) + ' in the picture  ·  × = said that many times' : 'waiting for the first one';
 });
 es.addEventListener('accept', pop);
 fetch('/api/config').then(r => r.json()).then(c => {

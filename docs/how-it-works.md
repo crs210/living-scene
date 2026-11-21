@@ -14,13 +14,18 @@
 4. **Feelings set the look.** Each batch is scored on nine feelings (hope, dread, wonder, anger,
    grief, belonging, agency, unease, urgency). The app turns them into atmosphere: light, warmth,
    rain, mist, wind, decay, bloom, tension. Every element is written to show its own wear and
-   flourishing from that atmosphere.
+   flourishing from that atmosphere. Rain is the one held back: it needs a sadness that lasts
+   (most of the session, not one batch), and fades in over the first twenty or so answers.
 5. **Repeats grow by themselves.** Each answer is sorted into a theme. The app tallies themes and
    feeds each theme's share of the room to its elements. An idea said twenty times is large without
-   being redrawn; themes the room drops shrink, fade and move aside.
-6. **Edit and combine before adding.** Only a few brand-new elements are allowed per batch. Most
+   being redrawn (on screen, from about 0.8x to 1.24x its drawn size); themes the room drops shrink,
+   fade and move aside.
+6. **The answers list shows what was used.** The director says which answers went into each idea.
+   An answer turns green once an element for its idea is on show, not merely when it has been read;
+   an answer that fits no idea stays white. "×3" on an answer means three people have now said it.
+7. **Edit and combine before adding.** Only a few brand-new elements are allowed per batch. Most
    changes are rewrites that work new ideas into what is already there.
-7. **The picture goes on a journey, then settles.** Phases: upheaval (early answers must rewrite
+8. **The picture goes on a journey, then settles.** Phases: upheaval (early answers must rewrite
    the opening), building, settling, and one final composed image that is held and saved.
 
 ## The flow: two speeds
@@ -28,7 +33,8 @@
 ```
  phone ── answer ──▶ server ──▶ instant layer (no model, under a second)
                         │          · a first nudge to the mood
-                        │          · a plain repeat grows and flashes its element
+                        │          · a plain repeat (it names a theme, or says the same as an
+                        │            earlier answer) grows and flashes its element, and turns green
                         │
                         └─ batch ─▶ director model
                                      1. fast pass   (about 8 s): feelings, themes, number changes,
@@ -39,7 +45,8 @@
 
 - Everything received in a second goes to the model as one batch. Answers that arrive while it is
   busy wait and go together next time, so there is never a backlog of stale requests.
-- Briefs beyond a round's allowance wait in a backlog and are drawn when there is capacity.
+- Briefs beyond a round's allowance wait in a backlog and are drawn when there is capacity. New
+  answers are always read before more of the backlog is drawn.
 - The display receives the whole scene once a second over Server-Sent Events and animates toward it.
 
 ## An element
@@ -56,7 +63,8 @@
 
 ```
 { "feelings": { hope, dread, ... each 0..1 },
-  "ideas":   [{ "theme", "n", "gist", "touches": ["id"] }],
+  "ideas":   [{ "theme", "n", "answers": [1, 4], "gist", "touches": ["id"] }],
+                                                             answers: numbers in the batch list
   "set":     [{ "id", "params": [{ name, value }] }],        move numbers on existing elements
   "add":     [{ "id", "theme", "layer", "box", "at", "enter", "desc", "code", "params" }],
                                                              a new element, or a rewrite if the id exists
@@ -99,7 +107,7 @@ themes and weights, feelings, atmosphere, the journey so far and every element.
 - **View**: pull the camera back or close in. The model may move it too.
 - **Start session / Settle now / Final image**: the session clock and its manual overrides.
 - **Propose opening scenes / Use mine / New scene from question**.
-- **Play demo**, **Save picture**.
+- **Play demo**, **Save picture**, **Clear answers** (empties the list; the picture stays).
 
 ## Recording and replay
 

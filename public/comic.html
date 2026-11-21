@@ -30,6 +30,9 @@
   #feed div { flex: none; background: #fbf6e9; border: .4vh dashed #15111c; border-radius: 2.2vh; padding: 1vh 1.4vh; font-size: 1.75vh; line-height: 1.3; box-shadow: .45vh .45vh 0 #15111c; position: relative; transition: background .8s; animation: in .4s cubic-bezier(.3,1.6,.6,1); }
   #feed div::after { content: ''; position: absolute; left: 2.4vh; bottom: -1.3vh; width: 1.6vh; height: 1.6vh; background: inherit; border-right: .4vh solid #15111c; border-bottom: .4vh solid #15111c; transform: rotate(45deg) skew(12deg, 12deg); }
   #feed div.in { background: #bfe9d9; border-style: solid; }
+  /* how many answers have said the same thing: shown on every answer of an idea voiced more than once */
+  #feed div b { position: absolute; top: -1.1vh; right: -0.6vh; background: #f6c544; border: .3vh solid #15111c; border-radius: 1.2vh; padding: 0 .8vh; font: 400 1.6vh 'Bangers', 'Impact', sans-serif; letter-spacing: .04em; }
+  #feed div b:empty { display: none; }
   #feed div:nth-child(n+9) { opacity: .7; } #feed div:nth-child(n+14) { opacity: .45; }
   @keyframes in { from { opacity: 0; transform: scale(.7); } }
   #code { top: 0; right: 0; bottom: 0; width: 36vw; background: rgba(21,17,28,.93); color: #e8e2d0; font: 1.35vh/1.45 ui-monospace, Consolas, monospace; padding: 2vh; overflow: auto; display: none; white-space: pre-wrap; }

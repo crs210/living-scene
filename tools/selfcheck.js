@@ -3,11 +3,13 @@
 //   npm test        (or: node tools/selfcheck.js)
 // It checks the plumbing (batching, themes, staggered reveal, receding, the reader/cartoonist split,
 // abandoned waits, the final image). It cannot check whether the pictures are any good.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { atmosphereFrom } from '../src/atmosphere.js';
+import { F } from '../src/prompt.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 3000 + Math.floor(700 + Math.random() * 200), P = `http://localhost:${PORT}`;
@@ -34,10 +36,17 @@ try {
 
   console.log('pages and filter');
   ok((await fetch(P + '/')).status === 200 && (await fetch(P + '/comic')).status === 200 && (await Promise.all(['host', 'stage', 'kit', 'panels'].map(m => fetch(P + '/display/' + m + '.js')))).every(r => r.status === 200), 'answer page, display and its scripts are served');
+  const pageScripts = ['display/host.js', 'display/stage.js', 'display/kit.js', 'display/panels.js', 'tone.js'].map(f => path.join(ROOT, 'public', f));
+  ok(pageScripts.every(f => spawnSync(process.execPath, ['--check', f]).status === 0), 'the scripts the browser runs have no syntax errors');
   ok((await fetch(P + '/display')).status === 404, 'removed pages are gone');
   ok((await post('/api/submit', { text: 'x', cid: 'f1' })).ok === false, 'a one-letter answer is refused');
   ok((await post('/api/submit', { text: 'I am scared to walk home at night', cid: 'f2' })).ok === true, 'an ordinary sentence containing "night" is accepted');
   await sleep(2200);
+
+  console.log('weather');
+  const mood = o => ({ ...Object.fromEntries(F.map(f => [f, 0])), ...o }), sad = mood({ grief: 0.5, dread: 0.4 }), mild = mood({ grief: 0.2, dread: 0.2, hope: 0.2 });
+  ok(atmosphereFrom(sad, sad, 'upheaval', 0.5, 4).rain === 0 && atmosphereFrom(mild, mild, 'building', 0.5, 60).rain === 0, 'no rain from the first few answers, or from a mild gloom');
+  ok(atmosphereFrom(sad, sad, 'building', 0.5, 40).rain > 0.3, 'a room that stays sad brings the rain');
 
   console.log('recorded demo');
   const demo = await post('/api/demo', { name: 'ai-sea', gap: 100 });
@@ -60,23 +69,25 @@ try {
   ok((await ids()).join() === 'sky,hill,walker', 'the opening appears at once, whole');
 
   console.log('one batch, one director');
-  await say(['data centres', 'bring back the dinosaurs']);
+  await say(['data centres', 'bring back the dinosaurs', 'no idea really']);
   const job = await get('/api/director/next?wait=3');
-  ok(job.kind === 'patch' && job.answers.length === 2, 'two answers sent together arrive as one batch');
+  ok(job.kind === 'patch' && job.answers.length === 3 && job.user.includes('1. data centres'), 'three answers sent together arrive as one batch');
   ok(job.system.includes('EDITING WHAT IS ALREADY THERE') && job.user.includes('walker') && job.user.includes('at 400,700'), 'the request carries the rules and the current elements with their positions');
   ok((await state()).feed.every(f => !f.in), 'answers are not marked as in the picture before the reply');
-  const out = await post('/api/director/patch', { patch: { feelings: { dread: 0.6 }, ideas: [{ theme: 'dc', n: 1, gist: 'dc', touches: ['sky'] }, { theme: 'dino', n: 1, gist: 'dino', touches: [] }],
+  const out = await post('/api/director/patch', { patch: { feelings: { dread: 0.6 }, ideas: [{ theme: 'dc', n: 1, answers: [1], gist: 'dc', touches: ['sky'] }, { theme: 'dino', n: 1, answers: [2], gist: 'dino', touches: [] }],
     add: [el('dino', { theme: 'dino', at: [300, 600], enter: 'rise' }), el('dc', { theme: 'dc', at: [1200, 600], enter: 'grow' }), { ...el('sky', { theme: 'dc' }), code: "/*V2*/ k.rect(0, 0, 10, 10, '#000', {});" },
       el('x1'), el('x2'), el('x3'), el('x4')], remove: ['walker'], note: 'n1' } });
   ok(out.added.length >= 3 && out.rejected.some(r => r.includes('allowance')), 'elements beyond the allowance are refused and reported, not dropped silently');
   const s0 = await state();
-  ok(s0.feed.every(f => f.in), 'answers are marked as in the picture once the reply is applied');
+  ok(s0.feed.every(f => !f.in), 'an answer is not marked as in the picture while its drawing is still waiting to be shown');
   ok(!s0.scene.els.some(e => e.id === 'dc') && s0.scene.els.some(e => e.id === 'walker'), 'new pieces are held back and removed ones linger: nothing pops in together');
   ok(s0.scene.m.decay > 0, 'feelings change the atmosphere straight away');
   await sleep(STAGGER * (out.added.length + 2) + 1500);
   const s1 = await state();
   ok(['dino', 'dc'].every(id => s1.scene.els.some(e => e.id === id)) && !s1.scene.els.some(e => e.id === 'walker'), 'after the stagger every piece has arrived and the removed one has gone');
   ok(s1.scene.els.find(e => e.id === 'sky').code.includes('V2') && s1.scene.els.find(e => e.id === 'dino').enter === 'rise', 'a rewrite replaces the old code; entrances are passed to the display');
+  const inNow = Object.fromEntries(s1.feed.map(f => [f.text, f.in]));
+  ok(inNow['data centres'] && inNow['bring back the dinosaurs'] && !inNow['no idea really'] && s1.drawn === 2, 'once drawn, the answers it used turn green; one the director left out does not');
   ok(s1.scene.dev.jobs.some(j => j.kind === 'patch' && j.doneAt && j.pieces.length >= 3), 'the developer log records the request and what it produced');
 
   console.log('repetition and receding');
@@ -93,21 +104,26 @@ try {
   await say(['funny hats', 'more trees']);
   const f = await get('/api/director/next?wait=3&role=read');
   ok(f.kind === 'fast' && f.user.includes('FAST PASS'), 'the reader gets a fast request with no drawing in it');
-  const fo = await post('/api/director/patch', { fast: true, patch: { feelings: { hope: 0.5 }, ideas: [{ theme: 'hats', n: 1, gist: 'hats', touches: ['dino'] }], set: [], remove: [], note: 'fast',
+  const fo = await post('/api/director/patch', { fast: true, patch: { feelings: { hope: 0.5 }, ideas: [{ theme: 'hats', n: 1, answers: [1], gist: 'hats', touches: ['dino', 'hill'] }, { theme: 'trees', n: 1, answers: [2], gist: 'trees', touches: [] }], set: [], remove: [], note: 'fast',
     draw: [{ id: 'dino', theme: 'dino', layer: 4, brief: 'dino gets a hat' }, { id: 'trees', theme: 'trees', layer: 4, brief: 'trees' }] } });
   ok(fo.toDraw.join() === 'dino,trees', 'the reader\'s briefs are queued for drawing');
+  ok(!(await state()).feed.find(f => f.text === 'funny hats').in, 'an idea that names an element it did not change is not shown as in the picture before its drawing lands');
   const [a, b] = await Promise.all([d1, d2]);
   ok(a.kind === 'draw' && b.kind === 'draw' && a.job !== b.job, 'two waiting cartoonists each get one brief');
   ok([a, b].find(x => x.id === 'dino').user.includes('Its current code'), 'a rewrite brief includes the element\'s current code');
   for (const x of [a, b]) await post('/api/director/patch', { draw: true, job: x.job, patch: { add: [el(x.id, { theme: x.id === 'dino' ? 'dino' : 'trees', at: [500, 600] })] } });
   await sleep(STAGGER * 3 + 1500);
-  ok((await ids()).includes('trees'), 'the cartoonists\' drawings arrive in the picture');
+  const s5 = await state();
+  ok(s5.scene.els.some(e => e.id === 'trees') && ['funny hats', 'more trees'].every(t => s5.feed.find(f => f.text === t).in), 'the cartoonists\' drawings arrive in the picture, and the answers they drew turn green');
 
   console.log('two speeds');
   const before = (await state()).scene.themes.find(t => t.key === 'jobs').count;
   await say(['jobs again']);                                   // no director has answered yet
   const mid = await state();
   ok(mid.scene.themes.find(t => t.key === 'jobs').count === before + 1 && mid.scene.dev.instant.some(i => i.theme === 'jobs'), 'a plain repeat grows its theme within a second, with no model');
+  ok(mid.feed.find(f => f.text === 'jobs again').in && mid.feed.find(f => f.text === 'jobs again').n === before + 1, 'a repeat of an idea already drawn turns green at once and shows how many have said it');
+  await say(['Data centres!']);
+  ok((await state()).scene.themes.find(t => t.key === 'dc').count === 2, 'an answer that says the same as an earlier one counts toward its idea at once');
   const sf = await get('/api/director/next?wait=3&role=solo');
   ok(sf.kind === 'fast', 'a single two-speed worker is given the quick read first');
   const so = await post('/api/director/patch', { fast: true, patch: { feelings: {}, ideas: [{ theme: 'jobs', n: 1, gist: 'jobs', touches: [] }], set: [], remove: [], note: 'solo', camera: { zoom: 0.8, focus: [800, 560] },

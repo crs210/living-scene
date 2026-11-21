@@ -2,7 +2,7 @@
 //   phones   -> POST /api/submit (an answer), POST /api/draft (an anonymous "someone is typing" cue)
 //   display  <- GET /events (Server-Sent Events: the full scene, at least once a second)
 //   director <> GET /api/director/next, POST /api/director/patch   (test-session mode; see src/director.js)
-// Host-only actions (settings, reset, hide, director queue) are accepted from localhost only.
+// Host-only actions (settings, reset, hide, demo) need localhost or the HOST_KEY; the director queue is localhost only.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,17 +21,16 @@ const lanIp = nets.find(a => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test
 const JOIN_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://${lanIp}:${PORT}/`;
 
 const director = createDirector({ question: QUESTION0 });
-let version, pending, feed, drafts, clients, metrics, answers, nextId = 1, seq;
+let version, pending, feed, drafts, clients, metrics, answers, nextId = 1;
 const sse = new Set();
 function reset() {
-  version = 0; seq = 0; answers = 0; pending = []; feed = []; drafts = new Map(); clients = new Map();
+  version = 0; answers = 0; pending = []; feed = []; drafts = new Map(); clients = new Map();
   metrics = { subs: new Map(), batches: [], rejected: 0 };
   director.reset();
 }
 reset();
-// Empty the answers list. When the scene itself starts over (a new opening or question), the director's count of
-// answers also starts over, so the numbering that decides which answers show as "in the picture" restarts with it.
-function clearAnswers(sceneRestarted) { feed = []; pending = []; answers = 0; if (sceneRestarted) seq = 0; }
+// Empty the answers list (the picture keeps what it has drawn).
+function clearAnswers() { feed = []; pending = []; answers = 0; }
 
 // ---------- the one-second loop: batch what arrived, send the scene ----------
 // People typing right now: two numbers per phone, worked out on the phone. Draft text is never sent.
@@ -45,15 +44,16 @@ function broadcast(ids = []) {
   version++;
   const now = Date.now();
   for (const id of ids) { const s = metrics.subs.get(id); if (s) s.tSent = now; }
-  const msg = `event: state\ndata: ${JSON.stringify({ v: version, scene: director.scene(), typing: typing(), answers,
-    feed: feed.slice(0, 40).map(f => ({ id: f.id, text: f.text, in: f.n <= director.seen() })) })}\n\n`;   // "in": the director has worked it into the picture
+  // each answer says whether it is in the picture yet ("in") and how many answers its idea has had ("n")
+  const list = feed.map(f => ({ id: f.id, text: f.text, ...director.placement(f.text) }));
+  const msg = `event: state\ndata: ${JSON.stringify({ v: version, scene: director.scene(), typing: typing(), answers, drawn: list.filter(f => f.in).length, feed: list.slice(0, 40) })}\n\n`;
   for (const res of sse) res.write(msg);
 }
 // Whatever has piled up goes to the director as ONE batch. Answers that arrive while it is busy
 // wait and go together next time, so the picture never works through a backlog of stale requests.
 function drain() {
   const batch = pending.splice(0);
-  for (const b of batch) { b.n = ++seq; if (!b.quiet) feed.unshift({ id: b.id, text: b.text, n: b.n }); }
+  for (const b of batch) if (!b.quiet) feed.unshift({ id: b.id, text: b.text });
   feed.length = Math.min(feed.length, 60);
   answers += batch.length;
   metrics.batches.push(batch.length);
@@ -133,8 +133,7 @@ const server = http.createServer(async (req, res) => {
     const b = await body(req);
     const out = director.control(b, () => broadcast());
     if (b.question) reset();
-    else if (b.concept !== undefined) clearAnswers(true);   // a new opening is a new scene: last scene's answers go
-    else if (b.clearAnswers) clearAnswers(false);
+    else if (b.concept !== undefined || b.clearAnswers) clearAnswers();   // a new opening is a new scene: the last scene's answers go
     broadcast();
     return json(res, 200, out);
   }
@@ -166,7 +165,7 @@ const server = http.createServer(async (req, res) => {
     const demo = JSON.parse(fs.readFileSync(path.join(dir, safe + '.json'), 'utf8'));
     reset();
     director.play(demo, { gap: Math.max(100, Number(b.gap) || 1200), done: () => broadcast(),
-      onAnswers: texts => { for (const text of texts) { feed.unshift({ id: nextId++, text, n: ++seq }); answers++; for (const r of sse) r.write('event: accept\ndata: 0\n\n'); } broadcast(); } });
+      onAnswers: texts => { for (const text of texts) { feed.unshift({ id: nextId++, text }); answers++; for (const r of sse) r.write('event: accept\ndata: 0\n\n'); } broadcast(); } });
     return json(res, 200, { ok: true, demo: safe, steps: demo.tape.length });
   }
 
