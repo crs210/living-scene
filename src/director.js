@@ -32,7 +32,7 @@ export function createDirector({ question: q0 }) {
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
   let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, ghosts = [], revealClock = 0;
-  const GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
+  let GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
   const ENTER = ['rise', 'drop', 'slide', 'grow', 'fade'];
   let jobs = [], jobSeq = 0;
   // One entry per request to the director: what went in, how long it took, what came back.
@@ -51,7 +51,8 @@ export function createDirector({ question: q0 }) {
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
   const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
   const sessionMode = () => !hasKey();
-  const mode = () => (MOCK ? 'mock replies' : hasKey() ? 'Claude (' + model + (drawModel !== model ? ' + ' + drawModel : '') + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
+  let tape = [], playing = null, replaying = false;   // every applied reply is recorded, so a session can be replayed with no model
+  const mode = () => playing ? 'a recorded session being replayed, no model running' : (MOCK ? 'mock replies' : hasKey() ? 'Claude (' + model + (drawModel !== model ? ' + ' + drawModel : '') + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
   const wake = () => { const ws = waiters; waiters = []; for (const w of ws) w(); };
   const wakeDraw = () => { const ws = drawWaiters; drawWaiters = []; for (const w of ws) w(); };
   const cacheFile = () => path.join(process.env.CACHE_DIR || path.join(process.cwd(), '.cache'), 'opening-v2-' + crypto.createHash('sha1').update(question + (chosen ? '|' + chosen.title : '')).digest('hex').slice(0, 10) + '.json');
@@ -121,7 +122,7 @@ export function createDirector({ question: q0 }) {
       const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
       return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
     });
-    return { mode: mode(), latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
+    return { mode: mode(), question, latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
       themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
   }
 
@@ -153,6 +154,7 @@ export function createDirector({ question: q0 }) {
     const obj = list => Array.isArray(list) ? Object.fromEntries(list.map(({ name, value }) => [String(name), Number(value) || 0])) : { ...(list || {}) };
     const out = { added: [], set: [], removed: [], pruned: [], rejected: [] }, rewritten = new Set();
     const n = answers || inFlight || 1;
+    if (!replaying) tape.push({ answers: isOpening || final || partial ? [] : [...lastBatch], opts: { opening: isOpening, final, partial, answers: n }, patch: (({ _job, ...p }) => p)(patch) });
     if (!isOpening && !partial) {
       batchNo++;
       for (const i of patch.ideas || []) {
@@ -180,22 +182,23 @@ export function createDirector({ question: q0 }) {
     }
     for (const s of patch.set || []) { const e = live.get(s.id); if (e) { const { w, ...ps } = obj(s.params); Object.assign(e.params, ps); out.set.push(s.id); } else out.rejected.push(s.id); }
     for (const id of patch.remove || []) { const e = live.get(id); if (!e) continue; live.delete(id); out.removed.push(id); if (!isOpening && !final) { const { was, revealAt, ...seen } = e; const old = revealAt > Date.now() ? was : seen; if (old) ghosts.push({ el: old, until: nextReveal() }); } }
-    if (isOpening) { if (live.size) { try { fs.mkdirSync(path.dirname(cacheFile()), { recursive: true }); fs.writeFileSync(cacheFile(), JSON.stringify([...live.values()])); } catch {} } }
+    if (isOpening) { if (live.size && !replaying) { try { fs.mkdirSync(path.dirname(cacheFile()), { recursive: true }); fs.writeFileSync(cacheFile(), JSON.stringify([...live.values()])); } catch {} } }
     else if (!partial) {
       feel(patch.feelings, n); if (!final) answersSeen += n;
       if (patch.note) journal.push({ note: String(patch.note).slice(0, 300), n });
       if (final) {
         isFinal = true;
+        if (!replaying)
         // Keep the finished session: the picture (as its elements), the journey, and the tally.
         try {
           const dir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions'); fs.mkdirSync(dir, { recursive: true });
           const w = weights();
-          fs.writeFileSync(path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '.json'), JSON.stringify({ question, opening: chosen, answers: answersSeen, settings, journey: journal.map(j => j.note), themes: [...themes].map(([k, t]) => ({ theme: k, answers: t.count, weight: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.answers - a.answers), feelings: total, atmosphere: atmosphere(), elements: [...live.values()] }, null, 1));
+          fs.writeFileSync(path.join(dir, new Date().toISOString().replace(/[:.]/g, '-') + '.json'), JSON.stringify({ question, chosen, opening: chosen, tape, answers: answersSeen, settings, journey: journal.map(j => j.note), themes: [...themes].map(([k, t]) => ({ theme: k, answers: t.count, weight: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.answers - a.answers), feelings: total, atmosphere: atmosphere(), elements: [...live.values()] }, null, 1));
         } catch (e) { console.error('could not save session:', e.message); }
       }
       out.pruned = prune();
     }
-    if (!partial) inFlight = 0;
+    if (!partial) { inFlight = 0; lastBatch = []; }
     const pieces = out.added.map(id => { const e = live.get(id); return { id, what: rewritten.has(id) ? 'rewrite' : 'new', theme: e.theme, enter: e.enter, chars: e.code.length, desc: e.desc.slice(0, 160), revealAt: e.revealAt || 0 }; });
     for (const g of ghosts) if (out.removed.includes(g.el.id) || out.pruned.includes(g.el.id)) pieces.push({ id: g.el.id, what: out.pruned.includes(g.el.id) ? 'pruned' : 'remove', revealAt: g.until });
     Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, feelings: patch.feelings ? top(patch.feelings) : '', ideas: (patch.ideas || []).slice(0, 12).map(i => ({ theme: String(i.theme || ''), n: Number(i.n) || 1, gist: String(i.gist || '').slice(0, 60), touches: Array.isArray(i.touches) ? i.touches.slice(0, 6).map(String) : [] })),
@@ -260,7 +263,7 @@ export function createDirector({ question: q0 }) {
     await guard('batch', async () => {
       while (queue.length || wantFinal) {
         if (queue.length && !isFinal) {
-          const batch = queue.splice(0);
+          const batch = queue.splice(0); lastBatch = batch;
           const fast = await ask('fast', batch); if (!fast) continue;
           apply({ ...fast, add: [] }, { answers: batch.length }); done();
           await Promise.all((fast.draw || []).slice(0, maxAdd(batch.length)).map(d => guard('draw ' + d.id, async () => { const r = await ask('draw', batch, d); if (r?.add?.[0]) { apply({ add: [r.add[0]], _job: r._job }, { partial: true }); done(); } })));
@@ -300,9 +303,27 @@ export function createDirector({ question: q0 }) {
     return { kind: 'idle' };
   }
 
-  function clear() { live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
+    // Replay a recorded session ({ question, chosen, tape }) on a timer. No model is involved.
+    async play(demo, { onAnswers = () => {}, done = () => {}, gap = 1200 } = {}) {
+      clear();
+      const token = {}, keepGap = GAP, sleep = ms => new Promise(r => setTimeout(r, ms));
+      playing = token; GAP = gap;
+      if (demo.question) question = String(demo.question).slice(0, 200);
+      chosen = demo.chosen || null;
+      try {
+        for (const step of demo.tape || []) {
+          if (playing !== token) return;
+          if (step.answers && step.answers.length) { lastBatch = step.answers; onAnswers(step.answers); await sleep(1300); if (playing !== token) return; }
+          replaying = true; try { apply(step.patch, step.opts); } finally { replaying = false; }
+          tape.push(step); done();
+          await sleep(step.opts.opening ? 2500 : Math.max(1500, revealClock - Date.now() + 1200));
+        }
+      } finally { GAP = keepGap; if (playing === token) { playing = null; done(); } }
+    },
+    tape: () => ({ question, chosen, tape }),
     // a reply posted by whoever is acting as director (test-session mode)
     reply(b) {
       const patch = b.patch || b;

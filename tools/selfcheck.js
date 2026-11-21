@@ -37,7 +37,17 @@ try {
   ok((await fetch(P + '/display')).status === 404, 'removed pages are gone');
   ok((await post('/api/submit', { text: 'x', cid: 'f1' })).ok === false, 'a one-letter answer is refused');
   ok((await post('/api/submit', { text: 'I am scared to walk home at night', cid: 'f2' })).ok === true, 'an ordinary sentence containing "night" is accepted');
-  await sleep(2200); await post('/api/reset?fresh', {});
+  await sleep(2200);
+
+  console.log('recorded demo');
+  const demo = await post('/api/demo', { gap: 100 });
+  ok(demo.ok && demo.steps >= 3, 'a recorded session starts replaying with no model');
+  await sleep(1000);
+  ok((await state()).scene.mode.includes('replayed'), 'the display says it is a replay, not a live model');
+  await sleep(11500);
+  const sd = await state();
+  ok(sd.scene.els.length >= 9 && sd.feed.length === 6 && sd.feed.every(f => f.in) && !sd.scene.mode.includes('replayed'), 'the replay ends with its picture built and its answers marked as included');
+  await post('/api/reset?fresh', {});
 
   console.log('opening');
   ok((await get('/api/director/next?wait=1')).kind === 'open', 'with no picture, the director is asked for an opening');

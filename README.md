@@ -10,14 +10,14 @@ fixed comic-style drawing kit, and the browser animates between states.
 
 ```
 node server.js          # Node 20 or newer; nothing to install for the default mode
-npm test                # self-check: 32 checks of the plumbing, about 20 seconds, no model needed
+npm test                # self-check: 35 checks of the plumbing, about 35 seconds, no model needed
 ```
 
 - Display (projector, on the computer running the app): http://localhost:3000/comic
 - Answers (phones on the same network): the address and QR code shown on the display
 - `npm i` is only needed for the QR code (`qrcode`) and, in API mode, `@anthropic-ai/sdk` and `zod`.
 
-Display keys: `S` controls, `D` director panel, `C` scene code, `P` save picture, `F` feed,
+Display keys: `0` play the recorded demo, `S` controls, `D` director panel, `C` scene code, `P` save picture, `F` feed,
 `H` hide everything but the picture, `R` reset, `1`-`4` send an example answer.
 
 ## How it works
@@ -42,6 +42,20 @@ Display keys: `S` controls, `D` director panel, `C` scene code, `P` save picture
 
 An element is `{ id, theme, layer, at, enter, desc, code, params }`. `code` is the body of
 `function (k, p, t, m)`: `k` the drawing kit, `p` its eased numbers, `t` seconds, `m` the atmosphere.
+
+## The recorded demo
+
+Press `0` on the display (or *Play demo* in the controls) to replay a recorded session on a timer:
+an opening, then two batches of three answers, about 17 seconds, with no model running. It shows
+the answers arriving, turning green, and the picture changing piece by piece. The display says it
+is a replay while it runs.
+
+- The demo is `demos/ai-sea.json`: a real Claude Sonnet session recorded on 2026-11-21, replayed as written.
+- Every session is recorded as it runs. `POST /api/demo {"save":"name"}` keeps the current one as
+  `demos/name.json`; `POST /api/demo {"name":"name"}` replays it; finished sessions in `sessions/`
+  carry the same recording.
+- A replay tests the display, the animation and the timing. It does not test what a model would
+  draw for new answers; for that, run a director and send `node tools/replay.js ai 1`.
 
 ## Who plays the director
 

@@ -143,6 +143,21 @@ const server = http.createServer(async (req, res) => {
       acceptToBroadcastMs: { p50: pct(sent, 0.5), p95: pct(sent, 0.95), max: pct(sent, 1) }, director: director.status().calls });
   }
 
+  // ---- recorded sessions: replay one with no model, or keep the current one as a demo ----
+  if (p === '/api/demo') {
+    const dir = path.join(ROOT, 'demos'), names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)) : [];
+    if (!POST) return json(res, 200, { demos: names });
+    if (!isLocal(req)) return json(res, 403, {});
+    const b = await body(req), safe = String(b.save || b.name || names[0] || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);
+    if (b.save) { if (!safe) return json(res, 400, { ok: false }); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, safe + '.json'), JSON.stringify(director.tape())); return json(res, 200, { ok: true, saved: safe }); }
+    if (!names.includes(safe)) return json(res, 404, { ok: false, reason: 'no such demo', demos: names });
+    const demo = JSON.parse(fs.readFileSync(path.join(dir, safe + '.json'), 'utf8'));
+    reset();
+    director.play(demo, { gap: Math.max(100, Number(b.gap) || 1200), done: () => broadcast(),
+      onAnswers: texts => { for (const text of texts) { feed.unshift({ id: nextId++, text, n: ++seq }); answers++; for (const r of sse) r.write('event: accept\ndata: 0\n\n'); } broadcast(); } });
+    return json(res, 200, { ok: true, demo: safe, steps: demo.tape.length });
+  }
+
   // ---- the director's queue (test-session mode) ----
   if (p === '/api/director/prompt' && POST) {   // the exact text a request would carry, without consuming anything
     if (!isLocal(req)) return json(res, 403, {});

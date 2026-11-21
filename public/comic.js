@@ -211,11 +211,12 @@ function compile(code) {
 }
 function applyScene(scene) {
   devNow = scene.dev || null; if (document.body.classList.contains('dev')) renderDev(scene);
+  if (scene.question) document.getElementById('q').textContent = scene.question;
   sceneMode = scene.mode; latestId = scene.latest; phase = scene.phase || 'gathering'; note = scene.note || '';
   if (scene.m) Object.assign(moodT, scene.m);
   themesNow = scene.themes || []; if (JSON.stringify(scene.concepts || []) !== JSON.stringify(conceptsNow) || scene.chosen !== chosenNow) { conceptsNow = scene.concepts || []; chosenNow = scene.chosen; renderConcepts(); }
   if (scene.settings && !slidersTouched) for (const key of ['abstraction', 'magnitude']) { const inp = document.getElementById(key); if (inp) inp.value = scene.settings[key]; }
-  document.getElementById('keys').textContent = 'Scene written by ' + scene.mode + '  ·  S controls · D director · C scene code · P save picture · F feed · H hide all · R reset';
+  document.getElementById('keys').textContent = 'Scene written by ' + scene.mode + '  ·  S controls · 0 demo · D director · C scene code · P save picture · F feed · H hide all · R reset';
   const seen = new Set();
   for (const e of scene.els) {
     seen.add(e.id);
@@ -424,6 +425,9 @@ function renderConcepts() {
 // keep the picture: a PNG of the panel exactly as it stands
 function savePicture() { cv.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'living-scene-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }); }
 document.getElementById('savepic').onclick = savePicture;
+// a recorded session replayed on a timer: about twenty seconds, no model involved
+const playDemo = () => fetch('/api/demo', { method: 'POST', body: '{}' }).then(r => { if (r.status === 403) alert('The demo can only be started at http://localhost:' + location.port + '/comic on the computer running the app.'); else feedEl.innerHTML = ''; });
+document.getElementById('demo').onclick = playDemo;
 document.getElementById('propose').onclick = () => setting({ propose: true });
 document.getElementById('own').onclick = () => { const v = document.getElementById('ownconcept').value.trim(); if (v) setting({ concept: v }); };
 const EXAMPLES = ['Honestly I just have a bad feeling about where this ends up', 'I worry hackers will use it to break into everything, but I hope it helps people understand each other', 'Cybersecurity. Every lock we rely on is going to fail', 'Excited about curing diseases, though my kids may never find jobs'];
@@ -432,6 +436,7 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
   if (key === 's') document.body.classList.toggle('controls');
   if (key === 'p') savePicture();
+  if (key === '0') playDemo();
   if (key === 'f') document.body.classList.toggle('nofeed');
   if (key === 'h') document.body.classList.toggle('bare');
   if (key === 'd') { document.body.classList.toggle('dev'); renderDev(); }
