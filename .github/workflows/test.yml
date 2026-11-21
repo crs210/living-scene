@@ -1,0 +1,13 @@
+# Runs the self-check on every push and pull request. No API key is needed or used.
+name: self-check
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
