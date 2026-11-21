@@ -88,7 +88,7 @@ export function createDirector({ question: q0 }) {
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
   const model = process.env.DIRECTOR_MODEL || 'claude-opus-5-5';      // reads the room, sorts ideas, writes briefs, the opening and the final image
-  const drawModel = process.env.DRAW_MODEL || 'claude-sonnet-5-5';  // writes each drawing from a brief: lighter and faster than the director
+  const drawModel = process.env.DRAW_MODEL || model;               // writes each drawing from a brief (set DRAW_MODEL=claude-sonnet-5-5 for faster, cheaper drawings)
   const API_CAP = Number(process.env.MAX_API_CALLS || 500);   // requests to the model per session, so a busy or hostile room cannot run up a bill
   let apiCalls = 0, capHit = false;
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
