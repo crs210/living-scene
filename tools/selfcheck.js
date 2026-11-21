@@ -14,7 +14,7 @@ const PORT = 3000 + Math.floor(700 + Math.random() * 200), P = `http://localhost
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'living-scene-check-'));
 const STAGGER = 500;
 const app = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore',
-  env: { ...process.env, PORT: String(PORT), STAGGER_MS: String(STAGGER), CACHE_DIR: path.join(tmp, 'cache'), SESSIONS_DIR: path.join(tmp, 'sessions'), ANTHROPIC_API_KEY: '', DIRECTOR_MOCK: '' } });
+  env: { ...process.env, PORT: String(PORT), STAGGER_MS: String(STAGGER), CACHE_DIR: path.join(tmp, 'cache'), SESSIONS_DIR: path.join(tmp, 'sessions'), ANTHROPIC_API_KEY: '', DIRECTOR_MOCK: '', NO_ENV_FILE: '1' } });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const post = (u, b) => fetch(P + u, { method: 'POST', body: JSON.stringify(b) }).then(r => r.json());

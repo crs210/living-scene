@@ -289,7 +289,7 @@ export function createDirector({ question: q0 }) {
     }
     const { system, user } = prompt(kind, answers, extra), t0 = performance.now(), job = begin(kind, answers || [], { system, user }, extra?.brief);
     const res = await client.messages.parse({
-      model: kind === 'draw' ? drawModel : model, max_tokens: kind === 'open' ? 24000 : kind === 'fast' || kind === 'concepts' ? 3000 : 10000,
+      model: kind === 'draw' ? drawModel : model, max_tokens: kind === 'open' ? 16000 : kind === 'fast' || kind === 'concepts' ? 4000 : 8000,   // larger values need streaming
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],     // identical on every call, so it caches
       output_config: { format: kind === 'concepts' ? formats.concepts : formats.patch, effort: 'low' },
       messages: [{ role: 'user', content: user }],

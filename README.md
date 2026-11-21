@@ -9,13 +9,17 @@ fixed comic-style drawing kit, and the browser animates between states.
 ## Run it
 
 ```
-node server.js          # Node 20 or newer; nothing to install for the default mode
+npm install             # once
+copy .env.example .env  # then put your Anthropic API key in .env (git ignores it)
+node server.js          # Node 20.12 or newer
 npm test                # self-check: 41 checks of the plumbing, about 45 seconds, no model needed
 ```
 
 - Display (projector, on the computer running the app): http://localhost:3000/comic
 - Answers (phones on the same network): the address and QR code shown on the display
-- `npm i` is only needed for the QR code (`qrcode`) and, in API mode, `@anthropic-ai/sdk` and `zod`.
+- With a key in `.env` the app directs itself through the Claude API. Without one it still starts, and waits
+  for a Claude Code session to play the director (see below).
+- **Never commit `.env` or paste a key into code, an issue or a chat.** Each person uses their own key.
 
 Display keys: `0` play the recorded demo, `S` controls, `D` director panel, `C` scene code, `P` save picture, `F` feed,
 `H` hide everything but the picture, `R` reset, `1`-`4` send an example answer.
@@ -69,7 +73,7 @@ is a replay while it runs.
 | Mode | How | Notes |
 |---|---|---|
 | Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. One worker in two steps (`--role solo`: a quick read of each batch, then the drawings one at a time, new answers always read first), one worker doing a whole batch per reply (no role), or a reader (`--role read`) plus several cartoonists (`--role draw`). Briefs beyond a round's allowance wait in a backlog; nothing is dropped. See `HANDOFF.md` for the worker briefs. |
-| API | `ANTHROPIC_API_KEY` set | Automatic: a fast pass (feelings, themes, numbers, briefs), then one request per drawing in parallel. `DIRECTOR_MODEL` reads the room, `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). **Never run with a real key.** |
+| API | `ANTHROPIC_API_KEY` in `.env` | Automatic: a fast pass (feelings, themes, numbers, briefs), then one request per drawing in parallel. `DIRECTOR_MODEL` reads the room, `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). First run for real on 2026-11-21. |
 | Mock | `DIRECTOR_MOCK=1` | Canned replies through the API path. Tests plumbing only. |
 
 Other settings: `PORT`, `QUESTION`, `PUBLIC_URL` (address shown to phones), `STAGGER_MS` (gap between
@@ -112,6 +116,10 @@ The controls work only at `localhost` on the computer running the app.
 
 **Speed**
 - Repeats and a first mood shift are instant (no model).
+- Through the API with Sonnet 5.5 (measured 2026-11-21, three batches of four or five answers): the opening took
+  18 seconds; each batch was read in 8 to 9 seconds and had all its drawings in after 20 to 23 seconds. That whole
+  run (an opening and three batches, 15 requests) used about 23,500 output tokens, roughly 30 US cents.
+- The figures below are for Claude Code workers standing in for the API, which are slower:
 - One Sonnet worker, whole batch per reply: 35 to 50 seconds from answers to picture.
 - One Sonnet worker in two steps: answers read in 15 to 30 seconds, then one drawing every 14 to 21 seconds;
   eight drawings took about two minutes to all arrive.
@@ -119,10 +127,12 @@ The controls work only at `localhost` on the computer running the app.
 - These are Claude Code stand-in timings. Real API speed has never been measured.
 
 **It needs a director, and that costs something**
-- Without an API key nothing happens until a Claude Code worker answers the queue, and every
-  worker uses subscription allowance, including while it waits. Start workers only when someone is
-  at the screen, prefer one, and give it a short idle limit.
-- The API path is exercised only by mock replies.
+- With an API key every batch of answers costs money (a few cents on Sonnet), and so does each opening.
+  Cost follows the number of batches, not the number of people. There is no spending cap in the app.
+- The API path has had one real run. Requests are not streamed, so output is capped at 16,000 tokens for
+  an opening and 8,000 for a drawing; refusals are reported but there is no fallback model.
+- Without a key nothing happens until a Claude Code worker answers the queue, and every worker uses
+  subscription allowance, including while it waits.
 
 **Safety**
 - Model-written code runs in the display page behind a word blocklist, not a sandbox, and audience

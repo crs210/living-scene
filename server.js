@@ -12,6 +12,8 @@ import { filterSubmission } from './src/filter.js';
 import { createDirector } from './src/director.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+// Settings and the API key come from a local .env file (ignored by git) when there is one.
+if (!process.env.NO_ENV_FILE) { try { process.loadEnvFile(path.join(ROOT, '.env')); } catch {} }
 const PORT = Number(process.env.PORT || 3000);
 const QUESTION0 = process.env.QUESTION || 'What worries or excites you about where AI is going?';
 const nets = Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
