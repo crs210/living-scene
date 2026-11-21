@@ -87,8 +87,8 @@ export function createDirector({ question: q0 }) {
   let recent = zero(), total = zero(), weight = 0;
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
-  const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';
-  const drawModel = process.env.DRAW_MODEL || model;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
+  const model = process.env.DIRECTOR_MODEL || 'claude-opus-5-5';      // reads the room, sorts ideas, writes briefs, the opening and the final image
+  const drawModel = process.env.DRAW_MODEL || 'claude-sonnet-5-5';  // writes each drawing from a brief: lighter and faster than the director
   const API_CAP = Number(process.env.MAX_API_CALLS || 500);   // requests to the model per session, so a busy or hostile room cannot run up a bill
   let apiCalls = 0, capHit = false;
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
@@ -252,7 +252,7 @@ export function createDirector({ question: q0 }) {
     if (!partial) { inFlight = 0; lastBatch = []; }
     const pieces = out.added.map(id => { const e = live.get(id); return { id, what: rewritten.has(id) ? 'rewrite' : 'new', theme: e.theme, enter: e.enter, chars: e.code.length, desc: e.desc.slice(0, 160), revealAt: e.revealAt || 0 }; });
     for (const g of ghosts) if (out.removed.includes(g.el.id) || out.pruned.includes(g.el.id)) pieces.push({ id: g.el.id, what: out.pruned.includes(g.el.id) ? 'pruned' : 'remove', revealAt: g.until });
-    Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, feelings: patch.feelings ? top(patch.feelings) : '', ideas: (patch.ideas || []).slice(0, 12).map(i => ({ theme: String(i.theme || ''), n: Number(i.n) || 1, gist: String(i.gist || '').slice(0, 60), touches: Array.isArray(i.touches) ? i.touches.slice(0, 6).map(String) : [] })),
+    Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, feelings: patch.feelings ? top(patch.feelings) : '', ideas: (patch.ideas || []).slice(0, 12).map(i => ({ theme: String(i.theme || ''), n: Number(i.n) || 1, answers: Array.isArray(i.answers) ? i.answers.slice(0, 40).map(Number) : [], gist: String(i.gist || '').slice(0, 60), touches: Array.isArray(i.touches) ? i.touches.slice(0, 6).map(String) : [] })),
       set: out.set, briefs: (patch.draw || []).map(d => String(d.id)), pieces, rejected: out.rejected, note: String(patch.note || '').slice(0, 300) });
     return out;
   }
