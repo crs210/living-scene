@@ -90,8 +90,8 @@ themes and weights, feelings, atmosphere, the journey so far and every element.
 | Name | Default | What it does |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | none | Turns on API mode |
-| `DIRECTOR_MODEL` | `claude-opus-5-5` | The model that reads the room, writes the briefs, the opening and the final image |
-| `DRAW_MODEL` | same as `DIRECTOR_MODEL` | The model that writes each drawing from a brief; `claude-sonnet-5-5` is faster and cheaper |
+| `DIRECTOR_MODEL` | `claude-sonnet-5-5` | The model that reads the room, writes the briefs, the opening and the final image |
+| `DRAW_MODEL` | same as `DIRECTOR_MODEL` | The model that writes each drawing from a brief |
 | `MAX_API_CALLS` | 500 | Requests to the model per session before it stops |
 | `HOST_KEY` | none | Lets a display that is not on the app's own computer use the host controls: open `/comic?key=<HOST_KEY>` |
 | `PORT` | 3000 | |
