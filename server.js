@@ -65,7 +65,12 @@ setInterval(() => {
 // ---------- http ----------
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
-const isLocal = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+// Who may use the host controls. On your own computer: anyone at localhost. When the app is hosted somewhere,
+// requests arrive through a proxy (they carry x-forwarded-for and are never "local"), so the host proves who they
+// are with HOST_KEY, sent by a display opened as /comic?key=<HOST_KEY>.
+const HOST_KEY = process.env.HOST_KEY || '';
+const isLocal = req => !req.headers['x-forwarded-for'] && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+const isHost = req => isLocal(req) || (HOST_KEY.length >= 6 && req.headers['x-host-key'] === HOST_KEY);
 function body(req, max = 4000) {
   return new Promise(resolve => {
     let s = '';
@@ -98,7 +103,7 @@ const server = http.createServer(async (req, res) => {
   // ---- phones ----
   if (p === '/api/submit' && POST) {
     const b = await body(req);
-    const cid = String(b.cid || req.socket.remoteAddress).slice(0, 40), now = Date.now();
+    const cid = String(b.cid || req.headers['x-forwarded-for'] || req.socket.remoteAddress).slice(0, 40), now = Date.now();
     const c = clients.get(cid) || { t: 0, last: '' };
     if (now - c.t < 2000) return json(res, 429, { ok: false, reason: 'One moment, then send again.' });
     const f = filterSubmission(b.text);
@@ -107,7 +112,7 @@ const server = http.createServer(async (req, res) => {
     clients.set(cid, { t: now, last: f.text.toLowerCase() });
     drafts.delete(cid);
     const id = nextId++;
-    pending.push({ id, text: f.text, quiet: !!b.quiet && isLocal(req) });   // quiet: counted and drawn, but kept out of the feed
+    pending.push({ id, text: f.text, quiet: !!b.quiet && isHost(req) });   // quiet: counted and drawn, but kept out of the feed
     metrics.subs.set(id, { tAccept: now });
     for (const r of sse) r.write(`event: accept\ndata: ${id}\n\n`);         // instant acknowledgement on the projector
     return json(res, 200, { ok: true });
@@ -121,7 +126,7 @@ const server = http.createServer(async (req, res) => {
   // ---- host (localhost only for anything that changes state) ----
   if (p === '/api/settings') {          // GET: full status. POST: sliders, session clock, question, opening choice
     if (!POST) return json(res, 200, director.status());
-    if (!isLocal(req)) return json(res, 403, {});
+    if (!isHost(req)) return json(res, 403, {});
     const b = await body(req);
     const out = director.control(b, () => broadcast());
     if (b.question) reset();
@@ -129,13 +134,13 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, out);
   }
   if (p === '/api/reset' && POST) {     // ?fresh also forgets the saved opening, so a new one is drawn
-    if (!isLocal(req)) return json(res, 403, {});
+    if (!isHost(req)) return json(res, 403, {});
     reset(); if (url.searchParams.has('fresh')) director.reset(true);
     broadcast(); director.open(() => broadcast());
     return json(res, 200, { ok: true });
   }
   if (p === '/api/hide' && POST) {      // take one answer out of the feed
-    if (!isLocal(req)) return json(res, 403, {});
+    if (!isHost(req)) return json(res, 403, {});
     const b = await body(req); feed = feed.filter(f => f.id !== b.id); broadcast();
     return json(res, 200, { ok: true });
   }
@@ -149,7 +154,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/demo') {
     const dir = path.join(ROOT, 'demos'), names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).sort((x, y) => fs.statSync(path.join(dir, y + '.json')).mtimeMs - fs.statSync(path.join(dir, x + '.json')).mtimeMs) : [];   // newest first: the default demo is the latest recording
     if (!POST) return json(res, 200, { demos: names });
-    if (!isLocal(req)) return json(res, 403, {});
+    if (!isHost(req)) return json(res, 403, {});
     const b = await body(req), safe = String(b.save || b.name || names[0] || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40);
     if (b.save) { if (!safe) return json(res, 400, { ok: false }); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, safe + '.json'), JSON.stringify(director.tape())); return json(res, 200, { ok: true, saved: safe }); }
     if (!names.includes(safe)) return json(res, 404, { ok: false, reason: 'no such demo', demos: names });

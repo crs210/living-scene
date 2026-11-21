@@ -14,7 +14,7 @@ const PORT = 3000 + Math.floor(700 + Math.random() * 200), P = `http://localhost
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'living-scene-check-'));
 const STAGGER = 500;
 const app = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore',
-  env: { ...process.env, PORT: String(PORT), STAGGER_MS: String(STAGGER), CACHE_DIR: path.join(tmp, 'cache'), SESSIONS_DIR: path.join(tmp, 'sessions'), ANTHROPIC_API_KEY: '', DIRECTOR_MOCK: '', NO_ENV_FILE: '1' } });
+  env: { ...process.env, PORT: String(PORT), STAGGER_MS: String(STAGGER), CACHE_DIR: path.join(tmp, 'cache'), SESSIONS_DIR: path.join(tmp, 'sessions'), ANTHROPIC_API_KEY: '', DIRECTOR_MOCK: '', NO_ENV_FILE: '1', HOST_KEY: 'check-key' } });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const post = (u, b) => fetch(P + u, { method: 'POST', body: JSON.stringify(b) }).then(r => r.json());
@@ -33,7 +33,7 @@ try {
   for (let i = 0; i < 40; i++) { try { await get('/api/config'); break; } catch { await sleep(150); } }
 
   console.log('pages and filter');
-  ok((await fetch(P + '/')).status === 200 && (await fetch(P + '/comic')).status === 200 && (await fetch(P + '/comic.js')).status === 200, 'answer page, display and its script are served');
+  ok((await fetch(P + '/')).status === 200 && (await fetch(P + '/comic')).status === 200 && (await Promise.all(['host', 'stage', 'kit', 'panels'].map(m => fetch(P + '/display/' + m + '.js')))).every(r => r.status === 200), 'answer page, display and its scripts are served');
   ok((await fetch(P + '/display')).status === 404, 'removed pages are gone');
   ok((await post('/api/submit', { text: 'x', cid: 'f1' })).ok === false, 'a one-letter answer is refused');
   ok((await post('/api/submit', { text: 'I am scared to walk home at night', cid: 'f2' })).ok === true, 'an ordinary sentence containing "night" is accepted');
@@ -48,6 +48,11 @@ try {
   const sd = await state();
   ok(sd.scene.els.length >= 9 && sd.feed.length === 6 && sd.feed.every(f => f.in) && !sd.scene.mode.includes('replayed'), 'the replay ends with its picture built and its answers marked as included');
   await post('/api/reset?fresh', {});
+
+  console.log('host controls');
+  const other = (path, key) => fetch(P + path, { method: 'POST', headers: { 'x-forwarded-for': '203.0.113.9', ...(key ? { 'x-host-key': key } : {}) }, body: '{}' }).then(r => r.status);
+  ok(await other('/api/settings') === 403 && await other('/api/reset') === 403 && await other('/api/demo') === 403, 'a visitor who is not the host cannot change settings, reset or start the demo');
+  ok(await other('/api/settings', 'wrong') === 403 && await other('/api/settings', 'check-key') === 200, 'the host key unlocks the controls from anywhere');
 
   console.log('opening');
   ok((await get('/api/director/next?wait=1')).kind === 'open', 'with no picture, the director is asked for an opening');

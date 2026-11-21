@@ -20,7 +20,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { FEELINGS, F, SYSTEM, abstractionText, PHASE_TEXT } from './prompt.js';
-import { toneOf } from '../public/tone.js';
+import { matchTheme, leanOf } from './instant.js';
+import { layoutReport } from './layout.js';
+import { atmosphereFrom } from './atmosphere.js';
+import { callModel, mockReply } from './model.js';
 
 export { FEELINGS };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
@@ -33,20 +36,16 @@ export function createDirector({ question: q0 }) {
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let camera = { zoom: 1, focus: [800, 560] };   // the view: below 1 pulls back, above 1 closes in on the focus point
   let instantLog = [];                           // what the app did by itself the moment an answer arrived
-  const STOP = new Set('the and for with that this they them will would could should have has are was were not but you your our its from about more most very just really again think worried worry excited make makes made get gets going where what when all any can too much many lot lots some'.split(' '));
-  const words = s => String(s).toLowerCase().replace(/[^a-z0-9 -]/g, ' ').split(/[\s-]+/).filter(w => w.length > 2 && !STOP.has(w)).map(w => w.replace(/ies$/, 'y').replace(/s$/, ''));
   // THE FAST SPEED. No model: runs the second an answer is accepted. It only does small, self-limiting things:
   // a first guess at the mood (the director's reading replaces it), and, when the answer plainly repeats an idea
   // already in the picture, one more count for that theme, which makes its element pop and grow at once.
   function instant(texts) {
     for (const text of texts.slice(0, 60)) {
-      const tone = toneOf(text) || {}, v = tone.v || 0, e = tone.energy || 0;
-      const lean = { hope: Math.max(0, v), dread: Math.max(0, -v) * 0.8, unease: Math.max(0, -v) * 0.5, urgency: e * 0.4 };
+      const { v, lean } = leanOf(text);
       for (const x in lean) if (lean[x] > recent[x]) recent[x] += (lean[x] - recent[x]) * 0.08;
-      const ws = new Set(words(text)); let best = null;
-      for (const [key, t] of themes) { const kw = words(key); if (kw.length && kw.every(w => ws.has(w)) && (!best || kw.length > best.n)) best = { key, t, n: kw.length }; }
-      if (best) { best.t.count++; best.t.pre = (best.t.pre || 0) + 1; best.t.last = batchNo; }
-      instantLog.push({ text: text.slice(0, 80), theme: best ? best.key : null, v: +v.toFixed(2) }); if (instantLog.length > 10) instantLog.shift();
+      const key = matchTheme(text, themes.keys()), t = key && themes.get(key);
+      if (t) { t.count++; t.pre = (t.pre || 0) + 1; t.last = batchNo; }
+      instantLog.push({ text: text.slice(0, 80), theme: key, v: +v.toFixed(2) }); if (instantLog.length > 10) instantLog.shift();
     }
   }
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
@@ -63,15 +62,17 @@ export function createDirector({ question: q0 }) {
   const nextReveal = () => (revealClock = Math.max(Date.now() + 1200, revealClock + GAP));
   const zero = () => Object.fromEntries(F.map(f => [f, 0]));
   let recent = zero(), total = zero(), weight = 0;
-  let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, client = null, formats = null, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
+  let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
   const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';
-  const drawModel = process.env.DRAW_MODEL || model;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
+  const drawModel = process.env.DRAW_MODEL || model;
+  const API_CAP = Number(process.env.MAX_API_CALLS || 500);   // requests to the model per session, so a busy or hostile room cannot run up a bill
+  let apiCalls = 0, capHit = false;   // the drawings can be written by a different (lighter, faster) model than the one that reads the room
   const MOCK = !!process.env.DIRECTOR_MOCK;      // exercise the API-mode plumbing with canned replies and delays, no network
   const hasKey = () => !!process.env.ANTHROPIC_API_KEY || MOCK;
   const sessionMode = () => !hasKey();
   let tape = [], playing = null, replaying = false;   // every applied reply is recorded, so a session can be replayed with no model
-  const mode = () => playing ? 'a recorded session being replayed, no model running' : (MOCK ? 'mock replies' : hasKey() ? 'Claude (' + model + (drawModel !== model ? ' + ' + drawModel : '') + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot');
+  const mode = () => playing ? 'a recorded session being replayed, no model running' : (MOCK ? 'mock replies' : hasKey() ? 'Claude (' + model + (drawModel !== model ? ' + ' + drawModel : '') + ')' : 'Claude (test session)') + (live.size ? '' : ', waiting for an opening shot') + (capHit ? '. SPENDING CAP REACHED: the picture has stopped changing' : '');
   const wake = () => { const ws = waiters; waiters = []; for (const w of ws) w(); };
   const wakeDraw = () => { const ws = drawWaiters; drawWaiters = []; for (const w of ws) w(); };
   const cacheFile = () => path.join(process.env.CACHE_DIR || path.join(process.cwd(), '.cache'), 'opening-v2-' + crypto.createHash('sha1').update(question + (chosen ? '|' + chosen.title : '')).digest('hex').slice(0, 10) + '.json');
@@ -89,25 +90,7 @@ export function createDirector({ question: q0 }) {
   // Of the elements a reply may change, only some may be brand new; the rest must be rewrites, so ideas get combined.
   const newCap = (n = 0) => phase() === 'settling' ? 1 : Math.max(1, Math.ceil(maxAdd(n) / 2));
   // Where things stand, from the footprints the model declares: what is piled up, and where there is room.
-  function layout() {
-    const solid = [...live.values()].filter(e => e.box && e.layer >= 2 && e.box[2] * e.box[3] < 0.5 * 1600 * 900);
-    const half = 800 / camera.zoom, lo = Math.round((camera.focus[0] - half) / 100) * 100, hi = Math.round((camera.focus[0] + half) / 100) * 100;
-    const view = '\nCAMERA now: zoom ' + camera.zoom.toFixed(2) + ', focus ' + camera.focus.join(',') + '. The stage you can stand things on runs from x ' + lo + ' to x ' + hi + '.';
-    if (!solid.length) return view;
-    const piled = [];
-    for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) {
-      const a = solid[i].box, b = solid[j].box;
-      const ox = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), oy = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
-      if (ox > 0 && oy > 0 && ox * oy > 0.4 * Math.min(a[2] * a[3], b[2] * b[3])) piled.push(solid[i].id + ' and ' + solid[j].id);
-    }
-    const free = []; let start = null;
-    for (let x = lo; x <= hi; x += 100) {
-      const used = x >= hi || solid.some(e => e.box[0] < x + 100 && e.box[0] + e.box[2] > x);
-      if (!used) { if (start === null) start = x; } else if (start !== null) { if (x - start >= 200) free.push('x ' + start + '-' + x); start = null; }
-    }
-    return view + '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
-      + (free.length ? 'Open ground with nothing standing on it: ' + free.join(', ') + '.' : 'There is no open ground left: work new ideas INTO existing elements, or pull the camera back to open more stage.');
-  }
+  const layout = () => layoutReport([...live.values()], camera);
 
   // ---- themes: repetition is what makes something big ----
   function weights() {
@@ -128,24 +111,7 @@ export function createDirector({ question: q0 }) {
   }
 
   // ---- atmosphere: nine feelings -> the drivers the renderer and every element read ----
-  function atmosphere() {
-    const k = ({ final: 0.15, settling: 0.3 })[phase()] ?? 0.65;       // settle toward the whole journey at the end
-    const a = Object.fromEntries(F.map(f => [f, k * recent[f] + (1 - k) * total[f]]));
-    const gain = 0.6 + settings.magnitude, g = x => clamp(x * gain);
-    const pos = (a.hope + a.wonder + a.belonging + a.agency) / 4, neg = (a.dread + a.anger + a.grief + a.unease) / 4;
-    return {
-      decay: g((a.grief + a.dread + a.anger) * 0.62 + a.unease * 0.2 - (a.hope + a.agency) * 0.3),
-      bloom: g((a.hope + a.wonder + a.belonging + a.agency) * 0.5 - neg * 0.5),
-      light: clamp(0.6 + gain * ((a.hope + a.wonder) * 0.35 - (a.dread + a.grief) * 0.45 - a.unease * 0.15), 0.3, 1),   // never so dark it cannot be read
-      warmth: clamp(gain * ((a.hope + a.belonging) * 0.9 - (a.dread + a.unease) * 0.8 - a.grief * 0.4), -1, 1),
-      storm: g(a.anger * 0.8 + a.dread * 0.5 + a.urgency * 0.4 - a.hope * 0.2),
-      rain: g(a.grief + a.dread * 0.35 - a.hope * 0.3 - a.wonder * 0.2),
-      mist: g(a.unease + a.grief * 0.25), wind: g(a.urgency * 0.9 + a.anger * 0.4),
-      tension: g(a.anger * 0.9 + a.urgency * 0.5 + a.dread * 0.3),
-      wonder: g(a.wonder * 1.1 + a.hope * 0.2), bond: g(a.belonging * 1.2 + a.hope * 0.2),
-      val: clamp((pos - neg) * 2 * gain, -1, 1),
-    };
-  }
+  const atmosphere = () => atmosphereFrom(recent, total, phase(), settings.magnitude);
   function feel(f, n) {
     if (!f) return;
     const step = (0.35 + 0.45 * settings.magnitude) * (0.5 + 0.5 * (1 - Math.exp(-Math.max(1, n) / 3)));
@@ -256,48 +222,16 @@ export function createDirector({ question: q0 }) {
 
   // ---- API mode: a fast pass (feelings, themes, numbers) lands first; drawings follow in parallel ----
   // Canned replies with realistic delays, to test batching and the fast-then-draw pipeline without a key.
-  async function mock(kind, answers = [], extra) {
-    const t0 = performance.now(), wait = ms => new Promise(r => setTimeout(r, ms)), n = calls.length;
-    const blob = (id, theme, x) => ({ id, theme, layer: 5, desc: 'mock ' + id, code: "var d = m.decay, b = m.bloom; k.blob(" + x + ", 520, 40 + 160 * (p.w || 1), 40 + 120 * (p.w || 1), k.mix('#57c7c2', '#6f6a80', d), { lw: 5 }); if (b > 0.3) k.sparkle(" + x + ", 380, 20);", params: [] });
-    let out;
-    if (kind === 'concepts') { await wait(400); out = { concepts: [{ title: 'Mock stage', pitch: 'A flat field.', room: 'Anything.' }] }; }
-    else if (kind === 'open') { await wait(1500); out = { add: [{ id: 'sky', layer: 0, desc: 'mock sky', code: "k.rect(0, 0, 1600, 900, k.mix('#27364f', '#7fb7c9', m.light), { lw: 0 });", params: [] }, { id: 'ground', layer: 1, desc: 'mock ground', code: "k.rect(0, 600, 1600, 300, '#6fa35a', { lw: 4 });", params: [] }], note: 'mock opening' }; }
-    else if (kind === 'draw') { await wait(1800 + Math.random() * 800); out = { add: [blob(extra.id, extra.theme, 200 + (n * 170) % 1200)] }; }
-    else { await wait(kind === 'fast' ? 500 : 900); const theme = 'theme-' + (answers.length % 3); out = { feelings: { ...zero(), hope: 0.4, unease: 0.3 }, ideas: [{ theme, n: answers.length || 1, gist: 'mock idea' }], set: [], add: [], draw: kind === 'fast' ? [{ id: 'm' + n, theme, layer: 5, brief: 'a blob' }, { id: 'n' + n, theme: 'theme-x', layer: 5, brief: 'another' }] : [], remove: [], note: 'mock note ' + n }; }
-    calls.push({ kind, answers: answers.length, ms: Math.round(performance.now() - t0), mock: true });
-    return out;
-  }
+  // One request to the director model (or its canned stand-in). Counts toward the spending cap.
   async function ask(kind, answers, extra) {
-    if (MOCK) { const job = begin(kind, answers || [], prompt(kind, answers, extra), extra?.brief); const out = await mock(kind, answers, extra); if (out) out._job = job; return out; }
-    if (!client) {
-      const { default: Anthropic } = await import('@anthropic-ai/sdk');
-      const { z } = await import('zod'); const { zodOutputFormat } = await import('@anthropic-ai/sdk/helpers/zod');
-      const P = z.array(z.object({ name: z.string(), value: z.number() }));
-      formats = {
-        patch: zodOutputFormat(z.object({
-          feelings: z.object(Object.fromEntries(F.map(f => [f, z.number()]))),
-          ideas: z.array(z.object({ theme: z.string(), n: z.number(), gist: z.string(), touches: z.array(z.string()) })),
-          set: z.array(z.object({ id: z.string(), params: P })),
-          add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), box: z.array(z.number()), at: z.array(z.number()), enter: z.enum(['rise', 'drop', 'slide', 'grow', 'fade']), desc: z.string(), code: z.string(), params: P })),
-          camera: z.object({ zoom: z.number(), focus: z.array(z.number()) }),
-          draw: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), brief: z.string() })),
-          remove: z.array(z.string()), note: z.string(),
-        })),
-        concepts: zodOutputFormat(z.object({ concepts: z.array(z.object({ title: z.string(), pitch: z.string(), room: z.string() })) })),
-      };
-      client = new Anthropic();
-    }
-    const { system, user } = prompt(kind, answers, extra), t0 = performance.now(), job = begin(kind, answers || [], { system, user }, extra?.brief);
-    const res = await client.messages.parse({
-      model: kind === 'draw' ? drawModel : model, max_tokens: kind === 'open' ? 16000 : kind === 'fast' || kind === 'concepts' ? 4000 : 8000,   // larger values need streaming
-      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],     // identical on every call, so it caches
-      output_config: { format: kind === 'concepts' ? formats.concepts : formats.patch, effort: 'low' },
-      messages: [{ role: 'user', content: user }],
-    });
-    calls.push({ kind, answers: answers?.length ?? 0, ms: Math.round(performance.now() - t0), out: res.usage?.output_tokens, cached: res.usage?.cache_read_input_tokens });
-    if (res.stop_reason === 'refusal') { lastError = 'the model declined this request'; Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, note: 'the model declined this request' }); return null; }
-    if (res.parsed_output) res.parsed_output._job = job;
-    return res.parsed_output;
+    if (apiCalls >= API_CAP) { capHit = true; throw new Error('spending cap reached (' + API_CAP + ' requests this session; raise MAX_API_CALLS or reset)'); }
+    apiCalls++;
+    const p = prompt(kind, answers, extra), job = begin(kind, answers || [], p, extra?.brief);
+    const r = MOCK ? await mockReply(kind, answers || [], extra, calls.length) : await callModel(kind, p, kind === 'draw' ? drawModel : model);
+    calls.push({ kind, answers: answers?.length ?? 0, ms: r.ms, out: r.outputTokens, cached: r.cachedTokens, mock: MOCK || undefined });
+    if (r.refused) { lastError = 'the model declined this request'; Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, note: lastError }); return null; }
+    if (r.out) r.out._job = job;
+    return r.out;
   }
   const guard = async (label, fn) => { try { await fn(); } catch (e) { lastError = `${label}: ${String(e.message || e).slice(0, 260)}`; console.error('director', lastError); } };
   async function open(done) {
@@ -361,7 +295,7 @@ export function createDirector({ question: q0 }) {
     return { kind: 'idle' };
   }
 
-  function clear() { camera = { zoom: 1, focus: [800, 560] }; instantLog = []; playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { apiCalls = 0; capHit = false; camera = { zoom: 1, focus: [800, 560] }; instantLog = []; playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
     // Replay a recorded session ({ question, chosen, tape }) on a timer. No model is involved.
