@@ -40,7 +40,7 @@ try {
   await sleep(2200);
 
   console.log('recorded demo');
-  const demo = await post('/api/demo', { gap: 100 });
+  const demo = await post('/api/demo', { name: 'ai-sea', gap: 100 });
   ok(demo.ok && demo.steps >= 3, 'a recorded session starts replaying with no model');
   await sleep(1000);
   ok((await state()).scene.mode.includes('replayed'), 'the display says it is a replay, not a live model');

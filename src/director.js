@@ -31,7 +31,7 @@ export function createDirector({ question: q0 }) {
   const themes = new Map();                      // key -> { count, born, last, gist }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
-  let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, ghosts = [], revealClock = 0;
+  let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, issuedNew = 0, ghosts = [], revealClock = 0;
   let GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
   const ENTER = ['rise', 'drop', 'slide', 'grow', 'fade'];
   let jobs = [], jobSeq = 0;
@@ -66,6 +66,27 @@ export function createDirector({ question: q0 }) {
   }
   const effMag = () => clamp(settings.magnitude * ({ upheaval: 1.35, building: 1, settling: 0.5, final: 0.3 })[phase()]);
   const maxAdd = (n = 0) => phase() === 'settling' ? 1 : Math.min(5, Math.round(1 + effMag() * 3) + (n >= 8 ? 1 : 0));   // a big batch earns one more
+
+  // Of the elements a reply may change, only some may be brand new; the rest must be rewrites, so ideas get combined.
+  const newCap = (n = 0) => phase() === 'settling' ? 1 : Math.max(1, Math.ceil(maxAdd(n) / 2));
+  // Where things stand, from the footprints the model declares: what is piled up, and where there is room.
+  function layout() {
+    const solid = [...live.values()].filter(e => e.box && e.layer >= 2 && e.box[2] * e.box[3] < 0.5 * 1600 * 900);
+    if (!solid.length) return '';
+    const piled = [];
+    for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) {
+      const a = solid[i].box, b = solid[j].box;
+      const ox = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), oy = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+      if (ox > 0 && oy > 0 && ox * oy > 0.4 * Math.min(a[2] * a[3], b[2] * b[3])) piled.push(solid[i].id + ' and ' + solid[j].id);
+    }
+    const free = []; let start = null;
+    for (let x = 0; x <= 1600; x += 100) {
+      const used = x >= 1600 || solid.some(e => e.box[0] < x + 100 && e.box[0] + e.box[2] > x);
+      if (!used) { if (start === null) start = x; } else if (start !== null) { if (x - start >= 200) free.push('x ' + start + '-' + x); start = null; }
+    }
+    return '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
+      + (free.length ? 'Open ground with nothing standing on it: ' + free.join(', ') + '.' : 'There is no open ground left: work new ideas INTO existing elements instead of adding.');
+  }
 
   // ---- themes: repetition is what makes something big ----
   function weights() {
@@ -120,7 +141,7 @@ export function createDirector({ question: q0 }) {
       if (!e.theme || w[e.theme] === undefined) return e;
       const quiet = batchNo - (themes.get(e.theme)?.last ?? batchNo);
       const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
-      return { ...e, recede, params: { ...e.params, w: w[e.theme] } };
+      return { ...e, recede, hits: themes.get(e.theme).count, params: { ...e.params, w: w[e.theme] } };
     });
     return { mode: mode(), question, latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
       themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
@@ -133,7 +154,7 @@ export function createDirector({ question: q0 }) {
     if (kind === 'concepts') return { system: SYSTEM, user: `The question on screen will be:\n"${question}"\n\nBefore any drawing, propose FOUR different opening stages for the host to choose between. Make them really different in kind: one everyday and literal, one a metaphorical place, one unexpected or surreal, and one nearly empty stage that the audience will fill. Each needs a title (2 to 4 words), a pitch (one sentence: the place and the viewpoint) and "room" (one sentence: what kinds of answers could arrive, break, grow or gather there).\nReturn only JSON: { "concepts": [ { "title", "pitch", "room" } ] }` };
     if (kind === 'open') return { system: SYSTEM, user: `The question on screen is:\n"${question}"\n\n${chosen ? `The host chose this opening stage:\n${chosen.title}: ${chosen.pitch}\n\n` : ''}${abs}\n\nWrite the opening shot.` };
     const w = weights();
-    const els = [...live.values()].map(e => `- ${e.id}${e.theme ? ` [theme ${e.theme}, w ${(w[e.theme] ?? 0).toFixed(2)}]` : ''}${e.stage ? ' [opening landmark]' : ''} (layer ${e.layer}${e.at ? `, at ${e.at.join(',')}` : ''}) ${JSON.stringify(e.params)}: ${e.desc}`).join('\n');
+    const els = [...live.values()].map(e => `- ${e.id}${e.theme ? ` [theme ${e.theme}, w ${(w[e.theme] ?? 0).toFixed(2)}]` : ''}${e.stage ? ' [opening landmark]' : ''} (layer ${e.layer}${e.box ? `, box ${e.box.join(',')}` : ''}${e.at ? `, at ${e.at.join(',')}` : ''}) ${JSON.stringify(e.params)}: ${e.desc}`).join('\n');
     const th = [...themes].sort((a, b) => b[1].count - a[1].count).map(([k, t]) => `- ${k}: ${t.count} answer${t.count === 1 ? '' : 's'}, weight ${w[k].toFixed(2)} (${t.gist})`).join('\n') || '(none yet)';
     const story = journal.slice(-6).map((j, i) => `${i + 1}. ${j.note}`).join('\n') || '(nothing yet)';
     const head = `The question on screen is:\n"${question}"\n\nThe journey so far (${answersSeen} answers):\n${story}\nFeelings across the session: ${top(total)}\nFeelings lately: ${top(recent)}\n\nThemes so far:\n${th}\n\nElements in the scene now:\n${els}\n\n`;
@@ -141,7 +162,7 @@ export function createDirector({ question: q0 }) {
     const n = maxAdd(answers.length), ph = phase();
     const pictured = new Set([...live.values()].map(e => e.theme).filter(Boolean));
     const owed = [...themes].filter(([k2, t]) => !pictured.has(k2) && t.count >= 2).sort((a, b) => b[1].count - a[1].count).map(([k2, t]) => `${k2} (${t.count})`).join(', ');
-    const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply; move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.${owed ? `\nOWED A PICTURE: these themes have been voiced more than once and still have no element: ${owed}. Draw them before anything voiced only once.` : ''}`;
+    const controls = `PHASE: ${PHASE_TEXT[ph] || PHASE_TEXT.building}\n${abs}\nMAGNITUDE ${effMag().toFixed(2)}: at most ${n} new or rewritten element${n === 1 ? '' : 's'} in this reply, of which at most ${newCap(answers.length)} may be brand new (the rest must be rewrites that work the new ideas into what exists); move numbers ${effMag() < 0.3 ? 'by small steps' : effMag() < 0.7 ? 'by about a third of their range' : 'most of the way'}.${owed ? `\nOWED A PICTURE: these themes have been voiced more than once and still have no element: ${owed}. Draw them before anything voiced only once.` : ''}` + layout();
     const list = `New answers in this batch (${answers.length}):\n${answers.map(a => `- ${a}`).join('\n')}`;
     if (kind === 'fast') return { system: SYSTEM, user: head + controls + '\n\n' + list + '\n\nFAST PASS: be quick. Write no code and leave "add" empty. Do everything else now: feelings, ideas with "touches", "set" (move numbers), "remove", "note". Then, for each new or rewritten element you want, add a brief to a "draw" list: { "id", "theme", "layer", "brief" }. To change an existing element use its id. Each brief goes to a separate cartoonist who sees the scene list but not your thoughts, so say in two or three sentences: what it is, in which mood (grim, idealised, playful), where it stands and how big, what it is attached to or does to its neighbours, and what its numbers mean.' };
     if (kind === 'draw') return { system: SYSTEM, user: head + controls + '\n\n' + list + `\n\nDRAW PASS: write exactly ONE element, returned alone in "add" (with "at" and "enter"), for this brief:\n${JSON.stringify(extra)}\n${live.get(extra?.id) ? `This REWRITES the existing element "${extra.id}": keep what it shows and add the change. Its current code:\n${live.get(extra.id).code}\n` : ''}Leave every other list empty and all feelings 0.` };
@@ -165,14 +186,17 @@ export function createDirector({ question: q0 }) {
     }
     // Honour the allowance the director was told when the request went out, even if the phase has moved on since.
     const cap = isOpening ? 12 : final ? 3 : partial ? 1 : Math.max(maxAdd(n), issuedCap); issuedCap = 0;
+    const capped = !isOpening && !final && !partial, newAllowed = Math.max(newCap(n), issuedNew); let newCount = 0; if (capped) issuedNew = 0;
     for (const a of (patch.add || []).slice(cap)) out.rejected.push((a?.id || '?') + ' (over the allowance of ' + cap + ')');
     for (const a of (patch.add || []).slice(0, cap)) {
       if (!a || typeof a.code !== 'string' || !a.id || a.code.length > 6000) { out.rejected.push(a?.id || '?'); continue; }
       const prev = live.get(a.id), key = a.theme ? String(a.theme).toLowerCase().trim().replace(/\s+/g, '-') : (prev?.theme ?? null);
       if (key && !themes.has(key)) themes.set(key, { count: 1, born: batchNo, last: batchNo, gist: key });
       const { w, ...params } = { ...(prev?.params || {}), ...obj(a.params) };
-      const at = Array.isArray(a.at) && a.at.length === 2 && a.at.every(Number.isFinite) ? [clamp(a.at[0], 0, 1600), clamp(a.at[1], 0, 900)] : prev?.at ?? null;
-      const el = { id: String(a.id), layer: Number(a.layer) || 0, desc: String(a.desc || '').slice(0, 400), code: a.code, params, theme: isOpening ? null : key, opening: isOpening || (prev?.opening && !key), stage: isOpening || !!prev?.stage || !!prev?.opening, born: prev?.born ?? batchNo, at, enter: ENTER.includes(a.enter) ? a.enter : prev?.enter || 'fade' };
+      if (capped && !prev && ++newCount > newAllowed) { out.rejected.push(a.id + ' (more than ' + newAllowed + ' brand-new elements: work it into an existing one)'); continue; }
+      const box = Array.isArray(a.box) && a.box.length === 4 && a.box.every(Number.isFinite) && a.box[2] > 0 && a.box[3] > 0 ? [Math.round(clamp(a.box[0], -200, 1600)), Math.round(clamp(a.box[1], -200, 900)), Math.round(clamp(a.box[2], 10, 2000)), Math.round(clamp(a.box[3], 10, 1300))] : prev?.box ?? null;
+      const at = Array.isArray(a.at) && a.at.length === 2 && a.at.every(Number.isFinite) ? [clamp(a.at[0], 0, 1600), clamp(a.at[1], 0, 900)] : prev?.at ?? (box ? [clamp(box[0] + box[2] / 2, 0, 1600), clamp(box[1] + box[3], 0, 900)] : null);
+      const el = { id: String(a.id), layer: Number(a.layer) || 0, desc: String(a.desc || '').slice(0, 400), code: a.code, params, theme: isOpening ? null : key, opening: isOpening || (prev?.opening && !key), stage: isOpening || !!prev?.stage || !!prev?.opening, born: prev?.born ?? batchNo, box, at, enter: ENTER.includes(a.enter) ? a.enter : prev?.enter || 'fade' };
       if (!isOpening && !final) {                          // revealed one after another, not all at once
         el.revealAt = nextReveal();
         if (prev) { const { was, revealAt, ...seen } = prev; el.was = revealAt > Date.now() ? was : seen; }
@@ -230,7 +254,7 @@ export function createDirector({ question: q0 }) {
           feelings: z.object(Object.fromEntries(F.map(f => [f, z.number()]))),
           ideas: z.array(z.object({ theme: z.string(), n: z.number(), gist: z.string(), touches: z.array(z.string()) })),
           set: z.array(z.object({ id: z.string(), params: P })),
-          add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), at: z.array(z.number()), enter: z.enum(['rise', 'drop', 'slide', 'grow', 'fade']), desc: z.string(), code: z.string(), params: P })),
+          add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), box: z.array(z.number()), at: z.array(z.number()), enter: z.enum(['rise', 'drop', 'slide', 'grow', 'fade']), desc: z.string(), code: z.string(), params: P })),
           draw: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), brief: z.string() })),
           remove: z.array(z.string()), note: z.string(),
         })),
@@ -298,7 +322,7 @@ export function createDirector({ question: q0 }) {
     if (!queue.length && !wantFinal) await new Promise(r => { waiters.push(r); setTimeout(r, waitMs); });
     if (gone()) return { kind: 'idle' };
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
-    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); lastBatch = answers; return issue(role === 'read' ? 'fast' : 'patch', answers); }
+    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); issuedNew = newCap(answers.length); lastBatch = answers; return issue(role === 'read' ? 'fast' : 'patch', answers); }
     if (wantFinal) { wantFinal = false; return issue('final'); }
     return { kind: 'idle' };
   }
@@ -331,7 +355,8 @@ export function createDirector({ question: q0 }) {
       if (b.fast) {
         const cap = Math.max(maxAdd(inFlight), issuedCap), answers = lastBatch;
         const out = apply({ ...patch, add: [] }, {});
-        const briefs = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id).slice(0, cap);
+        let fresh = 0; const newOk = Math.max(newCap(inFlight), issuedNew);
+        const briefs = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id).filter(d => live.has(d.id) || ++fresh <= newOk).slice(0, cap);
         for (const d of briefs) drawQueue.push({ brief: d, answers });
         wakeDraw();
         return { ...out, toDraw: briefs.map(d => d.id), dropped: (patch.draw || []).slice(cap).map(d => d.id) };

@@ -10,7 +10,7 @@ export const FEELINGS = {
 export const F = Object.keys(FEELINGS);
 
 export const KIT_DOC = `HOW THE PICTURE IS MADE
-The picture is a list of elements: { id, theme, layer, desc, code, params }.
+The picture is a list of elements: { id, theme, layer, box, at, enter, desc, code, params }.
 "code" is the BODY of a JavaScript function (k, p, t, m), run every frame on a 1600 x 900 canvas (x right, y down).
   p = this element's own numbers, eased toward their latest values; they start at 0 when an element is new, so it grows in.
   p.w = SUPPLIED BY THE APP for every element that has a theme: 0..1, how much of the room is behind that theme right now.
@@ -26,7 +26,10 @@ The picture is a list of elements: { id, theme, layer, desc, code, params }.
     k.dots(points, colour, size, gap, {fade:'up'|'down', a})  halftone screen clipped to a polygon
     k.hatch(points, colour, gap)   k.glow(x, y, r, colour, a)   k.burst(x, y, rOuter, rInner, spikes, fill, opts)
     k.alpha(a, function () { ... })  group opacity
-    Ready-made: k.figure(x, y, heightPx, coat, {walk: phase, sit, arms, bowed, hair})   k.tree(x, y, heightPx, {bare, bloom, leaf, flower, sway, seed})
+    Ready-made: k.figure(x, y, heightPx, coat, {walk: phase, sit, arms, bowed, hair, hat: 'cone'|'top'|'party'|'crown'})
+      k.stroll(x1, x2, yGround, count, t, {size, coats: ['#hex'], speed, hat, arms, depth})  people walking to and fro between x1 and x2 on their own;
+          they hurry in wind, gather when the room is close, bow when things decay. hat: true gives each a different hat.
+      k.tree(x, y, heightPx, {bare, bloom, leaf, flower, sway, seed})
       k.cloud(x, y, width, fill, {dark})   k.smoke(x, y, amount, colour, t, wind)   k.sparkle(x, y, r, colour)
       k.crack(x, y, length, seed)   k.boards(x, y, w, h)   k.scribble(x, y, w, h, colour, seed)
       k.building(xCentre, yGround, w, h, colour, {lit: 0..1, boarded: 0..1, cracks: 0..1, roof: 'flat', door: false, seed})  windows, door, roof, shaded side
@@ -75,16 +78,28 @@ A new idea never simply lands on top of the scene as one large separate object. 
 THE MOOD DECIDES WHICH VERSION YOU DRAW
 The same thing arrives differently depending on the feeling it came with. Voiced with dread or anger, a data centre is a crude windowless slab, oversized, fenced, dumped on the land. Voiced with hope or wonder, it is the idealised version: elegant, lit, planted, fitted into the hillside as if money and care were spent on it. Voiced as a joke, it is playful and absurd. Build that character into the shape itself when you draw, in addition to the decay and bloom response.
 
+EVERYTHING MOVES
+This is an animation, not a poster. Every element must visibly move all the time, using t: people walk (k.stroll, or k.figure with walk: t * 5), machines turn and blink, lights pulse along cables, smoke and flags drift, water laps, leaves and cloth sway, creatures breathe, graze and look around, vehicles cross the frame and wrap round (x = (t * speed) % 1700 - 50). A still object is a fault; give it one continuous motion and one occasional one (Math.sin(t * 0.3) > 0.9 for a blink or a twitch). The scene should always have people or creatures going about in it.
+
+WHERE THINGS GO
+Give every element a "box": [x, y, width, height], the rectangle it covers at full size, and keep the drawing inside it. You are told which elements are piled on top of each other and where open ground remains: use the open ground, and fix a pile-up each round. BIG THINGS GO BEHIND: a large arrival takes a low layer and stands back toward the horizon (smaller y, behind the landmarks), so that it frames the scene rather than covering it; small things come forward on high layers. Never cover more than a third of something already there unless you are replacing it. When there is no room, do not add: work the idea into an existing element.
+
+EDIT AND COMBINE BEFORE YOU ADD
+Most of each reply must be rewrites. You are told how many brand-new elements you may add; everything else has to go INTO what exists, so that ideas fuse: the dinosaur carries the power lines on its back; the data centre grows out of the hillside and the houses plug into it; the walkers wear the hats and push the prams. One rewritten element can and should answer two or three answers at once. Before adding, ask which existing element could take this idea on.
+
+REPEATS
+When an idea already in the picture is voiced again, add nothing for it: the app enlarges it and flashes it the moment it is repeated. When a theme passes three answers, also rewrite its element one step grander (more of it, more detail, more motion, more hold over its neighbours), and again when it doubles. The most-voiced idea should end up the most elaborate thing in the frame, not just the biggest.
+
 At most one new element per batch may be mainly a figure. Never solve two ideas the same way. No lettering, captions, icons or floating symbols.
 
 SIZE
 This is a projector. A new element at p.w 1 should span a third of the frame or more; even at p.w 0.2 it must be at least 120 pixels across. Put it where it reads, in front of anything that would hide it.
 
 OPENING SHOT (when asked)
-The opening is only where the picture starts; within a few batches the audience should have overturned it. So make a stage: a specific place seen from a specific spot, with a clear horizon, three or four LARGE simple landmarks, open ground where things can arrive, and quiet life. Do not pre-load it with imagery that already answers the question. Return 6 to 8 elements with no theme. Give each landmark one or two numbers that could later transform it (not just dim it). In each "desc" (under 240 characters) say what it is, where it sits in canvas coordinates, and what its numbers mean.
+The opening is only where the picture starts; within a few batches the audience should have overturned it. So make a stage: a specific place seen from a specific spot, with a clear horizon, three or four LARGE simple landmarks, open ground where things can arrive, and quiet life. Do not pre-load it with imagery that already answers the question. Return 6 to 8 elements with no theme. One of them must be people going about (k.stroll), and every landmark needs some motion. Give each landmark one or two numbers that could later transform it (not just dim it). In each "desc" (under 240 characters) say what it is, where it sits in canvas coordinates, and what its numbers mean.
 
 EACH BATCH
-You are told the PHASE and the two controls, ABSTRACTION and MAGNITUDE; follow them. Look first at what exists: deepen a present theme through its elements' numbers; connect new ideas to old ones (the pipe that drains the sea runs from the building someone else asked for). You may rewrite any element, including opening landmarks, by returning its id with new code, Themes the room stops voicing recede by themselves (the app shrinks them, fades them and moves them aside), so do NOT remove an element just because it has gone quiet; remove only what the room has contradicted or what you have replaced. Give every element "at": [x, y], the point where it stands (its base), and "enter": how it should arrive: "rise" (up out of the ground), "drop" (from above), "slide" (in from the nearer side), "grow" (swelling from its base) or "fade". The pieces of your reply are revealed one after another in the order you list them in "add", a few seconds apart, so order them as a small story. New element "desc" under 200 characters: what, where, what its numbers mean. End with a "note": one plain sentence on what the whole picture now says.
+You are told the PHASE and the two controls, ABSTRACTION and MAGNITUDE; follow them. Look first at what exists: deepen a present theme through its elements' numbers; connect new ideas to old ones (the pipe that drains the sea runs from the building someone else asked for). You may rewrite any element, including opening landmarks, by returning its id with new code, Themes the room stops voicing recede by themselves (the app shrinks them, fades them and moves them aside), so do NOT remove an element just because it has gone quiet; remove only what the room has contradicted or what you have replaced. Give every element "at": [x, y], the point where it stands (its base), and "enter": how it should arrive: "rise" (up out of the ground), "drop" (from above), "slide" (in from the nearer side), "grow" (swelling from its base) or "fade". The pieces of your reply are revealed one after another in the order you list them in "add", a few seconds apart, so order them as a small story: quick small changes first, the largest redraws last. New element "desc" under 200 characters: what, where, what its numbers mean. End with a "note": one plain sentence on what the whole picture now says.
 
 FINAL IMAGE (when asked)
 No new ideas. Compose one balanced picture: what the room felt most is largest and clearest, passing remarks are removed, unfinished things resolve, and the numbers come to rest.
@@ -93,7 +108,7 @@ REPLY FORMAT: only JSON.
 { "feelings": { ${F.map(f => `"${f}": 0`).join(', ')} },
   "ideas": [ { "theme": "key", "n": 1, "gist": "five words", "touches": [ "id" ] } ],
   "set": [ { "id", "params": [ { "name", "value" } ] } ],
-  "add": [ { "id", "theme", "layer", "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
+  "add": [ { "id", "theme", "layer", "box": [ x, y, w, h ], "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
   "remove": [ "id" ],
   "note": "..." }
 Lists may be empty. For an opening shot only "add" and "note" matter.`;

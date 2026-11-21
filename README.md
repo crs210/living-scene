@@ -36,7 +36,10 @@ Display keys: `0` play the recorded demo, `S` controls, `D` director panel, `C` 
    - each theme's share of the room is fed to its elements as `p.w`, so repeats grow by themselves;
    - themes the room stops voicing recede (smaller, fainter, moved aside); elements are deleted only
      when the scene is over-full, and opening landmarks never;
-   - the pieces of a reply are revealed one at a time, each with its own entrance.
+   - the pieces of a reply are revealed one at a time, each with its own entrance;
+   - an idea that is voiced again makes its element pop and grow on the spot;
+   - the director is told what is piled on top of what and where open ground remains, and may add
+     only a few brand-new elements per batch, so most changes are rewrites that combine ideas.
 5. **The session has phases:** upheaval (early answers must rewrite the opening), building,
    settling, and one final composed image that is held and saved to `sessions/`.
 
@@ -46,11 +49,12 @@ An element is `{ id, theme, layer, at, enter, desc, code, params }`. `code` is t
 ## The recorded demo
 
 Press `0` on the display (or *Play demo* in the controls) to replay a recorded session on a timer:
-an opening, then two batches of three answers, about 17 seconds, with no model running. It shows
+an opening, then three batches of four answers, about 25 seconds, with no model running. It shows
 the answers arriving, turning green, and the picture changing piece by piece. The display says it
 is a replay while it runs.
 
-- The demo is `demos/ai-sea.json`: a real Claude Sonnet session recorded on 2026-11-21, replayed as written.
+- The demos are real Claude Sonnet sessions recorded on 2026-11-21, replayed as written. `demos/ai-latest.json`
+  (a harbour town; played by default) and the earlier `demos/ai-sea.json`.
 - Every session is recorded as it runs. `POST /api/demo {"save":"name"}` keeps the current one as
   `demos/name.json`; `POST /api/demo {"name":"name"}` replays it; finished sessions in `sessions/`
   carry the same recording.

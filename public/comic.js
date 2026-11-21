@@ -102,6 +102,22 @@ const k = {
     if (o.arms) { k.line([[x - 9 * s, y - 48 * s], [x - 21 * s, y - 72 * s]], 4 * s, INK); k.line([[x + 9 * s, y - 48 * s], [x + 21 * s, y - 72 * s]], 4 * s, INK); }
     k.blob(x + (o.bowed ? 4 * s : 0), y - (o.bowed ? 57 : 61) * s, 9 * s, 9 * s, skin, { lw: 3 });
     if (o.hair) k.shape([[x - 9 * s, y - 63 * s], [x - 5 * s, y - 72 * s], [x + 5 * s, y - 72 * s], [x + 9 * s, y - 63 * s]], o.hair, { lw: 2, curve: true });
+    if (o.hat) {
+      const hx = x + (o.bowed ? 4 * s : 0), hy = y - (o.bowed ? 64 : 68) * s, tilt = Math.sin((o.walk || 0) * 0.5) * 2 * s;
+      if (o.hat === 'top') { k.rect(hx - 7 * s + tilt, hy - 16 * s, 14 * s, 16 * s, '#15111c', { lw: 2 }); k.line([[hx - 12 * s, hy], [hx + 12 * s, hy]], 3.5 * s, INK); }
+      else if (o.hat === 'crown') k.shape([[hx - 9 * s, hy], [hx - 9 * s, hy - 12 * s], [hx - 4 * s, hy - 6 * s], [hx, hy - 14 * s], [hx + 4 * s, hy - 6 * s], [hx + 9 * s, hy - 12 * s], [hx + 9 * s, hy]], '#f6c544', { lw: 2.5 });
+      else { k.shape([[hx - 9 * s, hy], [hx + tilt * 2, hy - (o.hat === 'party' ? 30 : 22) * s], [hx + 9 * s, hy]], o.hat === 'party' ? '#57c7c2' : '#f6c544', { lw: 2.5 }); if (o.hat === 'party') k.blob(hx + tilt * 2, hy - 31 * s, 3.5 * s, 3.5 * s, '#d8372f', { lw: 1.5 }); }
+    }
+  },
+  // people going about on their own: they hurry in wind, gather when the room is close, bow when things decay
+  stroll(x1, x2, y, count, t, o = {}) {
+    const size = o.size || 46, coats = o.coats || ['#d8372f', '#2f6f8f', '#f6c544', '#57c7c2', '#7a5c8e'], speed = (o.speed || 1) * (1 + 0.8 * mood.wind), span = Math.max(40, x2 - x1), mid = (x1 + x2) / 2;
+    for (let i = 0; i < Math.min(24, count); i++) {
+      const v = (18 + 22 * hash(i * 7 + 3)) * speed, u = (t * v + hash(i * 13 + 5) * span * 2) % (span * 2);
+      const x = k.lerp(x1 + (u < span ? u : span * 2 - u), mid + (hash(i + 31) - 0.5) * span * 0.25, clamp(mood.bond) * 0.7);
+      const hat = typeof o.hat === 'string' ? o.hat : o.hat ? ['cone', 'top', 'party', 'crown'][i % 4] : undefined;
+      k.figure(x, y + (hash(i * 3 + 1) - 0.5) * (o.depth ?? 16), size * (0.85 + 0.3 * hash(i + 11)), coats[i % coats.length], { walk: t * v * 0.16 + i, bowed: mood.decay > 0.55, arms: o.arms || (mood.bloom > 0.7 && i % 3 === 0), hat });
+    }
   },
   tree(x, y, height = 200, o = {}) {
     const size = Math.max(0.05, height / 200);   // height is in pixels, trunk base at (x, y)
@@ -226,9 +242,11 @@ function applyScene(scene) {
       const cur = el ? el.cur : Object.fromEntries(Object.keys(e.params).map(key => [key, 0]));
       // a rewritten element keeps drawing its old self underneath while the new one inks in over it
       const old = el && el.fn && el.errors <= 3 && el.grow > 0.5 && fn ? el.fn : null;
-      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : 0, rec: el ? el.rec : 0, old, mix: old ? 0 : 1 };
+      el = { layer: e.layer, code: e.code, desc: e.desc, theme: e.theme, fn, cur, tgt: {}, errors: err ? 99 : 0, born: el ? el.born : performance.now(), grow: el ? el.grow : 0, rec: el ? el.rec : 0, hits: el ? el.hits : undefined, bump: el ? el.bump : 0, old, mix: old ? 0 : 1 };
       els.set(e.id, el);
     }
+    if (el.hits !== undefined && e.hits > el.hits) el.bump = 1;      // its idea was just voiced again: flash it
+    el.hits = e.hits; el.stage = !!e.stage;
     el.tgt = e.params; el.layer = e.layer; el.gone = false; el.at = e.at || null; el.enter = e.enter || 'fade'; el.recT = e.recede || 0;
     for (const key in e.params) if (!(key in el.cur)) el.cur[key] = 0;
   }
@@ -279,6 +297,10 @@ function frame(now) {
     }
     // a theme the room has stopped voicing recedes: smaller, fainter, moved toward the nearer edge
     if (el.rec > 0.01) { const s = 1 - 0.42 * el.rec, dx = (ax < 800 ? -ax : 1600 - ax) * 0.5 * el.rec; g.translate(ax + dx, ay); g.scale(s, s); g.translate(-ax, -ay); alpha *= 1 - 0.4 * el.rec; }
+    // repeats are made visible by the display itself: an arrival is scaled by its theme's share of the room,
+    // and pops with a burst the moment the idea is voiced again
+    if (el.theme && !el.stage) { const s = (0.84 + 0.3 * (el.cur.w ?? 0.5)) * (1 + 0.13 * Math.sin(Math.PI * (el.bump || 0))); g.translate(ax, ay); g.scale(s, s); g.translate(-ax, -ay); }
+    if (el.bump > 0) { g.save(); g.globalAlpha = alpha * el.bump; k.burst(ax, ay - 150, 70 + 90 * (1 - el.bump), 34 + 50 * (1 - el.bump), 11, '#f6c544', { lw: 4 }); g.restore(); el.bump = Math.max(0, el.bump - dt / 1.1); }
     if (el.old) {
       el.mix = Math.min(1, el.mix + dt / 1.8);
       g.globalAlpha = alpha; try { el.old(k, el.cur, t, mood); } catch (x) { el.old = null; }
