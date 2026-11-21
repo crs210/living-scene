@@ -67,6 +67,7 @@ document.getElementById('savepic').onclick = savePicture;
 const playDemo = () => hostPost('/api/demo').then(r => { if (r.ok) feedEl.innerHTML = ''; });
 document.getElementById('demo').onclick = playDemo;
 document.getElementById('propose').onclick = () => setting({ propose: true });
+document.getElementById('clearanswers').onclick = () => setting({ clearAnswers: true }).then(r => { if (r.ok) feedEl.innerHTML = ''; });
 document.getElementById('own').onclick = () => { const v = document.getElementById('ownconcept').value.trim(); if (v) setting({ concept: v }); };
 const EXAMPLES = ['Honestly I just have a bad feeling about where this ends up', 'I worry hackers will use it to break into everything, but I hope it helps people understand each other', 'Cybersecurity. Every lock we rely on is going to fail', 'Excited about curing diseases, though my kids may never find jobs'];
 addEventListener('keydown', e => {

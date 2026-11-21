@@ -29,6 +29,9 @@ function reset() {
   director.reset();
 }
 reset();
+// Empty the answers list. When the scene itself starts over (a new opening or question), the director's count of
+// answers also starts over, so the numbering that decides which answers show as "in the picture" restarts with it.
+function clearAnswers(sceneRestarted) { feed = []; pending = []; answers = 0; if (sceneRestarted) seq = 0; }
 
 // ---------- the one-second loop: batch what arrived, send the scene ----------
 // People typing right now: two numbers per phone, worked out on the phone. Draft text is never sent.
@@ -130,6 +133,8 @@ const server = http.createServer(async (req, res) => {
     const b = await body(req);
     const out = director.control(b, () => broadcast());
     if (b.question) reset();
+    else if (b.concept !== undefined) clearAnswers(true);   // a new opening is a new scene: last scene's answers go
+    else if (b.clearAnswers) clearAnswers(false);
     broadcast();
     return json(res, 200, out);
   }

@@ -126,6 +126,18 @@ try {
   ok((await get('/api/director/next?wait=3&role=read')).kind === 'concepts', 'a request for opening options is not swallowed by a worker that hung up');
   await post('/api/director/patch', { patch: { concepts: [{ title: 'A', pitch: 'a', room: 'a' }] } });
 
+  console.log('clearing answers');
+  ok((await state()).feed.length > 0, 'the answers list has answers in it');
+  await post('/api/settings', { clearAnswers: true });
+  const sc1 = await state();
+  ok(sc1.feed.length === 0 && sc1.answers === 0 && sc1.scene.els.length > 0, 'Clear answers empties the list and the count but keeps the picture');
+  await say(['after the clear']);
+  ok((await state()).feed.every(f => !f.in), 'an answer sent after a clear is not shown as in the picture before it is drawn');
+  await post('/api/settings', { concept: 'A new place' });
+  ok((await state()).feed.length === 0, 'choosing a new opening clears the previous answers');
+  await get('/api/director/next?wait=1');                     // the new opening is requested; answer it so the scene exists again
+  await post('/api/director/patch', { opening: true, patch: { add: [el('sky'), el('hill')], note: 'new place' } });
+
   console.log('controls and the final image');
   ok((await post('/api/settings', { magnitude: 0.2, abstraction: 0.9 })).settings.magnitude === 0.2, 'the sliders are stored');
   ok((await post('/api/settings', { settle: true })).phase === 'settling', 'settle now moves the session to settling');
