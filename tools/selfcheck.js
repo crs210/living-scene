@@ -98,6 +98,23 @@ try {
   await sleep(STAGGER * 3 + 1500);
   ok((await ids()).includes('trees'), 'the cartoonists\' drawings arrive in the picture');
 
+  console.log('two speeds');
+  const before = (await state()).scene.themes.find(t => t.key === 'jobs').count;
+  await say(['jobs again']);                                   // no director has answered yet
+  const mid = await state();
+  ok(mid.scene.themes.find(t => t.key === 'jobs').count === before + 1 && mid.scene.dev.instant.some(i => i.theme === 'jobs'), 'a plain repeat grows its theme within a second, with no model');
+  const sf = await get('/api/director/next?wait=3&role=solo');
+  ok(sf.kind === 'fast', 'a single two-speed worker is given the quick read first');
+  const so = await post('/api/director/patch', { fast: true, patch: { feelings: {}, ideas: [{ theme: 'jobs', n: 1, gist: 'jobs', touches: [] }], set: [], remove: [], note: 'solo', camera: { zoom: 0.8, focus: [800, 560] },
+    draw: ['a', 'b', 'c', 'd', 'e', 'f'].map(x => ({ id: 'new' + x, theme: 'jobs', layer: 4, brief: x })) } });
+  ok(so.toDraw.length >= 1 && so.backlog.length >= 1 && so.toDraw.length + so.backlog.length === 6, 'briefs over the allowance wait in a backlog instead of being dropped');
+  const s4 = await state();
+  ok(s4.scene.themes.find(t => t.key === 'jobs').count === before + 1, 'a repeat the app already counted is not counted twice');
+  ok(s4.scene.camera.zoom === 0.8, 'the director can move the camera');
+  const sd1 = await get('/api/director/next?wait=3&role=solo');
+  ok(sd1.kind === 'draw' && sd1.user.includes('CAMERA now: zoom 0.80'), 'the same worker is then given the drawings one at a time, and is told the view');
+  await post('/api/director/patch', { draw: true, job: sd1.job, patch: { add: [el(sd1.id, { theme: 'jobs', box: [100, 500, 200, 200] })] } });
+
   console.log('an abandoned wait');
   const ac = new AbortController(); fetch(P + '/api/director/next?wait=30&role=read', { signal: ac.signal }).catch(() => {}); await sleep(400); ac.abort(); await sleep(300);
   await post('/api/settings', { propose: true });

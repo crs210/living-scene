@@ -84,6 +84,9 @@ This is an animation, not a poster. Every element must visibly move all the time
 WHERE THINGS GO
 Give every element a "box": [x, y, width, height], the rectangle it covers at full size, and keep the drawing inside it. You are told which elements are piled on top of each other and where open ground remains: use the open ground, and fix a pile-up each round. BIG THINGS GO BEHIND: a large arrival takes a low layer and stands back toward the horizon (smaller y, behind the landmarks), so that it frames the scene rather than covering it; small things come forward on high layers. Never cover more than a third of something already there unless you are replacing it. When there is no room, do not add: work the idea into an existing element.
 
+THE CAMERA
+You may move the camera with "camera": { "zoom": 1, "focus": [x, y] }. zoom below 1 pulls back (down to 0.6): everything in front of the backdrop shrinks toward the focus point, the sky and ground stay full, and more stage opens up at the sides, as the request tells you. zoom above 1 (up to 1.6) closes in on the focus point. Pull back when the stage is full or an idea is about scale, the wider world or everyone; close in when one idea dominates or a small human detail matters. Move it rarely and for a reason, by at most 0.25 a reply; leave it out to keep the current view.
+
 EDIT AND COMBINE BEFORE YOU ADD
 Most of each reply must be rewrites. You are told how many brand-new elements you may add; everything else has to go INTO what exists, so that ideas fuse: the dinosaur carries the power lines on its back; the data centre grows out of the hillside and the houses plug into it; the walkers wear the hats and push the prams. One rewritten element can and should answer two or three answers at once. Before adding, ask which existing element could take this idea on.
 
@@ -110,6 +113,7 @@ REPLY FORMAT: only JSON.
   "set": [ { "id", "params": [ { "name", "value" } ] } ],
   "add": [ { "id", "theme", "layer", "box": [ x, y, w, h ], "at": [ x, y ], "enter": "rise", "desc", "code", "params": [ { "name", "value" } ] } ],
   "remove": [ "id" ],
+  "camera": { "zoom": 1, "focus": [ x, y ] },
   "note": "..." }
 Lists may be empty. For an opening shot only "add" and "note" matter.`;
 

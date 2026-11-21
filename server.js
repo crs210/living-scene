@@ -52,8 +52,8 @@ function drain() {
   feed.length = Math.min(feed.length, 60);
   answers += batch.length;
   metrics.batches.push(batch.length);
+  director.onBatch(batch.map(b => b.text), () => broadcast());   // the instant layer acts now; in API mode the reply lands when it is ready
   broadcast(batch.map(b => b.id));
-  director.onBatch(batch.map(b => b.text), () => broadcast());   // API mode: the reply lands when it is ready
 }
 setInterval(() => {
   director.tick(() => broadcast());

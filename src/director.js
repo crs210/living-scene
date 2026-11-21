@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { FEELINGS, F, SYSTEM, abstractionText, PHASE_TEXT } from './prompt.js';
+import { toneOf } from '../public/tone.js';
 
 export { FEELINGS };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
@@ -30,6 +31,24 @@ export function createDirector({ question: q0 }) {
   const live = new Map();                        // id -> element
   const themes = new Map();                      // key -> { count, born, last, gist }
   const settings = { abstraction: 0.5, magnitude: 0.5 };
+  let camera = { zoom: 1, focus: [800, 560] };   // the view: below 1 pulls back, above 1 closes in on the focus point
+  let instantLog = [];                           // what the app did by itself the moment an answer arrived
+  const STOP = new Set('the and for with that this they them will would could should have has are was were not but you your our its from about more most very just really again think worried worry excited make makes made get gets going where what when all any can too much many lot lots some'.split(' '));
+  const words = s => String(s).toLowerCase().replace(/[^a-z0-9 -]/g, ' ').split(/[\s-]+/).filter(w => w.length > 2 && !STOP.has(w)).map(w => w.replace(/ies$/, 'y').replace(/s$/, ''));
+  // THE FAST SPEED. No model: runs the second an answer is accepted. It only does small, self-limiting things:
+  // a first guess at the mood (the director's reading replaces it), and, when the answer plainly repeats an idea
+  // already in the picture, one more count for that theme, which makes its element pop and grow at once.
+  function instant(texts) {
+    for (const text of texts.slice(0, 60)) {
+      const tone = toneOf(text) || {}, v = tone.v || 0, e = tone.energy || 0;
+      const lean = { hope: Math.max(0, v), dread: Math.max(0, -v) * 0.8, unease: Math.max(0, -v) * 0.5, urgency: e * 0.4 };
+      for (const x in lean) if (lean[x] > recent[x]) recent[x] += (lean[x] - recent[x]) * 0.08;
+      const ws = new Set(words(text)); let best = null;
+      for (const [key, t] of themes) { const kw = words(key); if (kw.length && kw.every(w => ws.has(w)) && (!best || kw.length > best.n)) best = { key, t, n: kw.length }; }
+      if (best) { best.t.count++; best.t.pre = (best.t.pre || 0) + 1; best.t.last = batchNo; }
+      instantLog.push({ text: text.slice(0, 80), theme: best ? best.key : null, v: +v.toFixed(2) }); if (instantLog.length > 10) instantLog.shift();
+    }
+  }
   let settleNow = false, isFinal = false, endsAt = 0, startedAt = 0, batchNo = 0;
   let journal = [], answersSeen = 0, concepts = [], chosen = null, issuedCap = 0, issuedNew = 0, ghosts = [], revealClock = 0;
   let GAP = Number(process.env.STAGGER_MS || 3500);          // pieces of one reply are revealed this far apart
@@ -72,7 +91,9 @@ export function createDirector({ question: q0 }) {
   // Where things stand, from the footprints the model declares: what is piled up, and where there is room.
   function layout() {
     const solid = [...live.values()].filter(e => e.box && e.layer >= 2 && e.box[2] * e.box[3] < 0.5 * 1600 * 900);
-    if (!solid.length) return '';
+    const half = 800 / camera.zoom, lo = Math.round((camera.focus[0] - half) / 100) * 100, hi = Math.round((camera.focus[0] + half) / 100) * 100;
+    const view = '\nCAMERA now: zoom ' + camera.zoom.toFixed(2) + ', focus ' + camera.focus.join(',') + '. The stage you can stand things on runs from x ' + lo + ' to x ' + hi + '.';
+    if (!solid.length) return view;
     const piled = [];
     for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) {
       const a = solid[i].box, b = solid[j].box;
@@ -80,12 +101,12 @@ export function createDirector({ question: q0 }) {
       if (ox > 0 && oy > 0 && ox * oy > 0.4 * Math.min(a[2] * a[3], b[2] * b[3])) piled.push(solid[i].id + ' and ' + solid[j].id);
     }
     const free = []; let start = null;
-    for (let x = 0; x <= 1600; x += 100) {
-      const used = x >= 1600 || solid.some(e => e.box[0] < x + 100 && e.box[0] + e.box[2] > x);
+    for (let x = lo; x <= hi; x += 100) {
+      const used = x >= hi || solid.some(e => e.box[0] < x + 100 && e.box[0] + e.box[2] > x);
       if (!used) { if (start === null) start = x; } else if (start !== null) { if (x - start >= 200) free.push('x ' + start + '-' + x); start = null; }
     }
-    return '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
-      + (free.length ? 'Open ground with nothing standing on it: ' + free.join(', ') + '.' : 'There is no open ground left: work new ideas INTO existing elements instead of adding.');
+    return view + '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
+      + (free.length ? 'Open ground with nothing standing on it: ' + free.join(', ') + '.' : 'There is no open ground left: work new ideas INTO existing elements, or pull the camera back to open more stage.');
   }
 
   // ---- themes: repetition is what makes something big ----
@@ -143,7 +164,7 @@ export function createDirector({ question: q0 }) {
       const recede = e.stage || phase() === 'final' ? 0 : +(clamp((0.34 - w[e.theme]) / 0.24) * clamp((quiet - 1) / 2)).toFixed(2);   // weak AND unvoiced for a while
       return { ...e, recede, hits: themes.get(e.theme).count, params: { ...e.params, w: w[e.theme] } };
     });
-    return { mode: mode(), question, latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
+    return { mode: mode(), question, camera, latest, els, m: atmosphere(), phase: phase(), settings, waiting: queue.length + inFlight, dev: { now: Date.now(), instant: instantLog.slice(-6), queue: queue.slice(0, 30), toDraw: drawQueue.map(d => d.brief.id), jobs: jobs.slice(-10) }, note: journal.at(-1)?.note || '', concepts, chosen: chosen?.title || null,
       themes: [...themes].map(([k, t]) => ({ key: k, count: t.count, w: +w[k].toFixed(2), gist: t.gist })).sort((a, b) => b.count - a.count) };
   }
 
@@ -174,6 +195,7 @@ export function createDirector({ question: q0 }) {
     if (Array.isArray(patch.concepts)) { Object.assign(job, { doneAt: Date.now(), ms: Date.now() - job.sentAt, note: patch.concepts.length + ' opening options' }); concepts = patch.concepts.slice(0, 5).map(c => ({ title: String(c.title || '').slice(0, 60), pitch: String(c.pitch || '').slice(0, 300), room: String(c.room || '').slice(0, 300) })); return { concepts: concepts.length }; }
     const obj = list => Array.isArray(list) ? Object.fromEntries(list.map(({ name, value }) => [String(name), Number(value) || 0])) : { ...(list || {}) };
     const out = { added: [], set: [], removed: [], pruned: [], rejected: [] }, rewritten = new Set();
+    if (patch.camera && Number.isFinite(Number(patch.camera.zoom))) { const f = patch.camera.focus; camera = { zoom: clamp(Number(patch.camera.zoom), 0.6, 1.6), focus: Array.isArray(f) && f.length === 2 && f.every(Number.isFinite) ? [clamp(f[0], 0, 1600), clamp(f[1], 0, 900)] : camera.focus }; out.camera = camera; }
     const n = answers || inFlight || 1;
     if (!replaying) tape.push({ answers: isOpening || final || partial ? [] : [...lastBatch], opts: { opening: isOpening, final, partial, answers: n }, patch: (({ _job, ...p }) => p)(patch) });
     if (!isOpening && !partial) {
@@ -181,7 +203,7 @@ export function createDirector({ question: q0 }) {
       for (const i of patch.ideas || []) {
         const key = String(i.theme || '').toLowerCase().trim().replace(/\s+/g, '-').slice(0, 40); if (!key) continue;
         const t = themes.get(key) || { count: 0, born: batchNo, gist: String(i.gist || key).slice(0, 60) };
-        t.count += Math.max(1, Math.min(n, Number(i.n) || 1)); t.last = batchNo; themes.set(key, t);
+        t.count += Math.max(0, Math.max(1, Math.min(n, Number(i.n) || 1)) - (t.pre || 0)); t.pre = 0; t.last = batchNo; themes.set(key, t);   // repeats the app already counted are not counted twice
       }
     }
     // Honour the allowance the director was told when the request went out, even if the phase has moved on since.
@@ -208,9 +230,11 @@ export function createDirector({ question: q0 }) {
     for (const id of patch.remove || []) { const e = live.get(id); if (!e) continue; live.delete(id); out.removed.push(id); if (!isOpening && !final) { const { was, revealAt, ...seen } = e; const old = revealAt > Date.now() ? was : seen; if (old) ghosts.push({ el: old, until: nextReveal() }); } }
     if (isOpening) { if (live.size && !replaying) { try { fs.mkdirSync(path.dirname(cacheFile()), { recursive: true }); fs.writeFileSync(cacheFile(), JSON.stringify([...live.values()])); } catch {} } }
     else if (!partial) {
+      for (const t of themes.values()) t.pre = 0;
       feel(patch.feelings, n); if (!final) answersSeen += n;
       if (patch.note) journal.push({ note: String(patch.note).slice(0, 300), n });
       if (final) {
+        drawQueue = [];
         isFinal = true;
         if (!replaying)
         // Keep the finished session: the picture (as its elements), the journey, and the tally.
@@ -255,6 +279,7 @@ export function createDirector({ question: q0 }) {
           ideas: z.array(z.object({ theme: z.string(), n: z.number(), gist: z.string(), touches: z.array(z.string()) })),
           set: z.array(z.object({ id: z.string(), params: P })),
           add: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), box: z.array(z.number()), at: z.array(z.number()), enter: z.enum(['rise', 'drop', 'slide', 'grow', 'fade']), desc: z.string(), code: z.string(), params: P })),
+          camera: z.object({ zoom: z.number(), focus: z.array(z.number()) }),
           draw: z.array(z.object({ id: z.string(), theme: z.string(), layer: z.number(), brief: z.string() })),
           remove: z.array(z.string()), note: z.string(),
         })),
@@ -300,6 +325,7 @@ export function createDirector({ question: q0 }) {
   // Answers arriving while a request is in flight wait and go together in the next batch.
   function onBatch(texts, done) {
     if (isFinal) return;
+    if (live.size) instant(texts);
     queue.push(...texts);
     if (sessionMode()) return wake();
     pump(done);
@@ -308,26 +334,34 @@ export function createDirector({ question: q0 }) {
   const issue = (kind, answers = []) => { const p = prompt(kind, answers); begin(kind, answers, p); return { kind, ...(kind === 'patch' || kind === 'fast' ? { answers } : {}), ...p }; };
   // role 'all' (default): one director does everything, a whole batch per reply.
   // role 'read': feelings, themes, numbers and briefs only (fast). role 'draw': one drawing per request; run several at once.
+  // role 'all': one director, a whole batch per reply (drawings included).
+  // role 'solo': one director, two speeds: each batch gets a quick read first (feelings, themes, numbers, briefs),
+  //              then the drawings are done one at a time, with new answers always read before more drawing.
+  // role 'read' / 'draw': the same split across several workers.
   async function next(waitMs, role = 'all', gone = () => false) {   // gone(): the asker hung up while waiting, so it must not be handed work
     if (!sessionMode()) return { kind: 'none', reason: 'not in session mode' };
-    if (role === 'draw') {
-      if (!drawQueue.length) await new Promise(r => { drawWaiters.push(r); setTimeout(r, waitMs); });
-      if (gone()) return { kind: 'idle' };
+    const drawJob = () => {
       const d = drawQueue.shift(); if (!d) return { kind: 'idle' };
       const p = prompt('draw', d.answers, d.brief), job = begin('draw', d.answers, p, d.brief.id + ': ' + String(d.brief.brief || '').slice(0, 400));
       return { kind: 'draw', job: job.n, id: d.brief.id, ...p };
+    };
+    if (role === 'draw') {
+      if (!drawQueue.length) await new Promise(r => { drawWaiters.push(r); setTimeout(r, waitMs); });
+      return gone() ? { kind: 'idle' } : drawJob();
     }
+    const solo = role === 'solo';
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
     if (!live.size) return issue('open');
-    if (!queue.length && !wantFinal) await new Promise(r => { waiters.push(r); setTimeout(r, waitMs); });
+    if (!queue.length && !wantFinal && !(solo && drawQueue.length)) await new Promise(r => { waiters.push(r); setTimeout(r, waitMs); });
     if (gone()) return { kind: 'idle' };
     if (wantConcepts) { wantConcepts = false; return issue('concepts'); }
-    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); issuedNew = newCap(answers.length); lastBatch = answers; return issue(role === 'read' ? 'fast' : 'patch', answers); }
+    if (queue.length && !isFinal) { const answers = queue.splice(0); inFlight = answers.length; issuedCap = maxAdd(answers.length); issuedNew = newCap(answers.length); lastBatch = answers; return issue(solo || role === 'read' ? 'fast' : 'patch', answers); }
     if (wantFinal) { wantFinal = false; return issue('final'); }
+    if (solo && drawQueue.length && !isFinal) return drawJob();
     return { kind: 'idle' };
   }
 
-  function clear() { playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
+  function clear() { camera = { zoom: 1, focus: [800, 560] }; instantLog = []; playing = null; tape = []; live.clear(); themes.clear(); latest = null; queue = []; calls = []; lastError = null; inFlight = 0; journal = []; answersSeen = 0; batchNo = 0; jobs = []; drawQueue = []; ghosts = []; revealClock = 0; recent = zero(); total = zero(); weight = 0; settleNow = false; isFinal = false; endsAt = 0; wantFinal = false; }
   return {
     scene, prompt, apply, open, onBatch, next,
     // Replay a recorded session ({ question, chosen, tape }) on a timer. No model is involved.
@@ -353,13 +387,16 @@ export function createDirector({ question: q0 }) {
       const patch = b.patch || b;
       if (b.draw) { const a = (patch.add || [])[0]; if (!a) return { rejected: ['no element in reply'] }; return apply({ add: [a], _job: jobs.find(j => j.n === Number(b.job)) }, { partial: true }); }
       if (b.fast) {
-        const cap = Math.max(maxAdd(inFlight), issuedCap), answers = lastBatch;
+        const cap = Math.max(maxAdd(inFlight), issuedCap), answers = lastBatch, newOk = Math.max(newCap(inFlight), issuedNew);
         const out = apply({ ...patch, add: [] }, {});
-        let fresh = 0; const newOk = Math.max(newCap(inFlight), issuedNew);
-        const briefs = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id).filter(d => live.has(d.id) || ++fresh <= newOk).slice(0, cap);
-        for (const d of briefs) drawQueue.push({ brief: d, answers });
-        wakeDraw();
-        return { ...out, toDraw: briefs.map(d => d.id), dropped: (patch.draw || []).slice(cap).map(d => d.id) };
+        // Nothing is thrown away: briefs within this round's allowance are drawn first; the rest wait in the
+        // backlog behind anything already queued, and are drawn when a cartoonist is free.
+        const all = (Array.isArray(patch.draw) ? patch.draw : []).filter(d => d && d.id), now = [], later = []; let fresh = 0;
+        for (const d of all) { const isNew = !live.has(d.id); if (now.length < cap && (!isNew || ++fresh <= newOk)) now.push(d); else later.push(d); }
+        drawQueue = drawQueue.filter(q => !all.some(d => d.id === q.brief.id));          // a newer brief for the same element replaces the queued one
+        drawQueue = [...now.map(d => ({ brief: d, answers })), ...drawQueue, ...later.map(d => ({ brief: d, answers, backlog: true }))].slice(0, 24);
+        wakeDraw(); wake();
+        return { ...out, toDraw: now.map(d => d.id), backlog: later.map(d => d.id) };
       }
       return apply(patch, { opening: !!b.opening, final: !!b.final });
     },
@@ -367,6 +404,7 @@ export function createDirector({ question: q0 }) {
     control(b, done) {
       if (typeof b.abstraction === 'number') settings.abstraction = clamp(b.abstraction);
       if (typeof b.magnitude === 'number') settings.magnitude = clamp(b.magnitude);
+      if (typeof b.zoom === 'number') camera = { ...camera, zoom: clamp(b.zoom, 0.6, 1.6) };
       if (b.start) { startedAt = Date.now(); endsAt = startedAt + Math.max(20, Number(b.start)) * 1000; settleNow = false; isFinal = false; }
       if (b.settle) settleNow = true;
       if (b.final) { wantFinal = true; sessionMode() ? wake() : pump(done); }

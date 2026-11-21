@@ -225,9 +225,11 @@ function compile(code) {
   if (BANNED.test(code) || code.length > 6000) throw new Error('scene code rejected by safety check');
   return new Function('k', 'p', 't', 'm', '"use strict";' + code);
 }
+const cam = { zoom: 1, fx: 800, fy: 560 }, camT = { ...cam };   // the view, eased toward what the director (or the host) asked for
 function applyScene(scene) {
   devNow = scene.dev || null; if (document.body.classList.contains('dev')) renderDev(scene);
   if (scene.question) document.getElementById('q').textContent = scene.question;
+  if (scene.camera) { camT.zoom = scene.camera.zoom; camT.fx = scene.camera.focus[0]; camT.fy = scene.camera.focus[1]; const z = document.getElementById('zoom'); if (z && document.activeElement !== z) z.value = scene.camera.zoom; }
   sceneMode = scene.mode; latestId = scene.latest; phase = scene.phase || 'gathering'; note = scene.note || '';
   if (scene.m) Object.assign(moodT, scene.m);
   themesNow = scene.themes || []; if (JSON.stringify(scene.concepts || []) !== JSON.stringify(conceptsNow) || scene.chosen !== chosenNow) { conceptsNow = scene.concepts || []; chosenNow = scene.chosen; renderConcepts(); }
@@ -278,6 +280,7 @@ function frame(now) {
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.fillStyle = PAPER; g.fillRect(0, 0, cv.width, cv.height);
   g.setTransform(sc, 0, 0, sc, ox, oy);
   g.save(); g.beginPath(); g.rect(0, 0, 1600, 900); g.clip();
+  for (const key in cam) cam[key] += (camT[key] - cam[key]) * (1 - Math.exp(-dt / 2.2));
   for (const [id, el] of order) {
     const kx = 1 - Math.exp(-dt / 2.4);
     for (const key in el.tgt) el.cur[key] += ((el.gone ? 0 : el.tgt[key]) - el.cur[key]) * kx;
@@ -286,6 +289,13 @@ function frame(now) {
     if (el.gone && el.grow < 0.01) { els.delete(id); continue; }
     if (!el.fn || el.errors > 3) continue;
     g.save();
+    // the camera: things in front of the backdrop scale about the focus point and re-centre; the backdrop (layers 0-1)
+    // stays full when pulling back and only swells a little when closing in, so the frame is never left bare
+    if (Math.abs(cam.zoom - 1) > 0.003) {
+      const back = el.layer <= 1, f = back ? (cam.zoom > 1 ? 0.3 : 0) : el.layer === 2 ? 0.7 : 1, s = 1 + (cam.zoom - 1) * f;
+      const cx = back ? cam.fx : cam.fx + (800 - cam.fx) * f, cy = back ? cam.fy : cam.fy + (500 - cam.fy) * f;
+      g.translate(cx, cy); g.scale(s, s); g.translate(-cam.fx, -cam.fy);
+    }
     // entrance (and exit, in reverse): each thing arrives in its own way from where it stands
     const u = 1 - el.grow * el.grow * (3 - 2 * el.grow), ax = el.at ? el.at[0] : 800, ay = el.at ? el.at[1] : 650;
     let alpha = clamp(el.grow * 1.6);
@@ -370,6 +380,9 @@ function renderDev(scene) {
   add(box, 'div', 'dim', sc0.mode + '  ·  phase ' + sc0.phase + '  ·  ' + sc0.els.length + ' elements  ·  abstraction ' + sc0.settings.abstraction + ', magnitude ' + sc0.settings.magnitude);
   if (!d) { add(box, 'div', 'dim', 'No director log in this mode.'); return; }
   const jobs = d.jobs || [], open = jobs.filter(j => !j.doneAt), done = jobs.filter(j => j.doneAt).reverse();
+  add(box, 'h3', '', '0  DONE AT ONCE BY THE APP, NO MODEL');
+  if (!(d.instant || []).length) add(box, 'div', 'dim', 'nothing yet');
+  for (const i of d.instant || []) add(box, 'div', i.theme ? 'hot' : 'dim', '· ' + i.text + (i.theme ? '   ->  repeat of ' + i.theme + ': grown and flashed' : '') + (i.v ? '   mood ' + (i.v > 0 ? '+' : '') + i.v : ''));
   add(box, 'h3', '', '1  WAITING TO BE READ  (' + d.queue.length + ')');
   if (!d.queue.length) add(box, 'div', 'dim', 'nothing waiting'); for (const a of d.queue) add(box, 'div', 'ans', '· ' + a);
   add(box, 'h3', '', '2  WITH THE DIRECTOR  (' + open.length + ')');
@@ -434,6 +447,7 @@ fetch('/api/config').then(r => r.json()).then(c => {
 });
 // sliders: abstraction (how literal or dreamlike) and magnitude (how much each batch changes)
 const setting = b => fetch('/api/settings', { method: 'POST', body: JSON.stringify(b) }).then(r => { if (r.status === 403) alert('The controls only work when this display is opened at http://localhost:' + location.port + '/comic on the computer running the app.'); return r; });
+document.getElementById('zoom').addEventListener('input', e => setting({ zoom: +e.target.value }));
 for (const key of ['abstraction', 'magnitude']) document.getElementById(key).addEventListener('input', e => { slidersTouched = true; setting({ [key]: +e.target.value }); });
 document.getElementById('start').onclick = () => setting({ start: +document.getElementById('secs').value || 120 });
 document.getElementById('settle').onclick = () => setting({ settle: true });
