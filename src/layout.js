@@ -5,7 +5,10 @@ export function layoutReport(elements, camera) {
   const solid = elements.filter(e => e.box && e.layer >= 2 && e.box[2] * e.box[3] < 0.5 * 1600 * 900);
   const half = 800 / camera.zoom, lo = Math.round((camera.focus[0] - half) / 100) * 100, hi = Math.round((camera.focus[0] + half) / 100) * 100;
   const view = '\nCAMERA now: zoom ' + camera.zoom.toFixed(2) + ', focus ' + camera.focus.join(',') + '. The stage you can stand things on runs from x ' + lo + ' to x ' + hi + '.';
-  if (!solid.length) return view;
+  const count = elements.length;
+  const crowd = '\nTHINGS IN THE FRAME: ' + count + (count >= 9 ? '. That is too many: merge or remove at least one this round, and add nothing brand new.'
+    : count >= 7 ? '. That is about right: only add something brand new if you merge or remove something else.' : '. There is room for a little more.');
+  if (!solid.length) return view + crowd;
   const piled = [];
   for (let i = 0; i < solid.length; i++) for (let j = i + 1; j < solid.length; j++) {
     const a = solid[i].box, b = solid[j].box;
@@ -17,6 +20,6 @@ export function layoutReport(elements, camera) {
     const used = x >= hi || solid.some(e => e.box[0] < x + 100 && e.box[0] + e.box[2] > x);
     if (!used) { if (start === null) start = x; } else if (start !== null) { if (x - start >= 200) free.push('x ' + start + '-' + x); start = null; }
   }
-  return view + '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
+  return view + crowd + '\nLAYOUT: ' + (piled.length ? 'these are piled on top of each other: ' + piled.slice(0, 6).join('; ') + '. Fix at least one this round: move it, shrink it, send it behind, or merge the two into one element. ' : 'nothing is piled up. ')
     + (free.length ? 'Open ground with nothing standing on it: ' + free.join(', ') + '.' : 'There is no open ground left: work new ideas INTO existing elements, or pull the camera back to open more stage.');
 }

@@ -43,7 +43,7 @@ function broadcast(ids = []) {
   const now = Date.now();
   for (const id of ids) { const s = metrics.subs.get(id); if (s) s.tSent = now; }
   const msg = `event: state\ndata: ${JSON.stringify({ v: version, scene: director.scene(), typing: typing(), answers,
-    feed: feed.slice(0, 14).map(f => ({ id: f.id, text: f.text, in: f.n <= director.seen() })) })}\n\n`;   // "in": the director has worked it into the picture
+    feed: feed.slice(0, 40).map(f => ({ id: f.id, text: f.text, in: f.n <= director.seen() })) })}\n\n`;   // "in": the director has worked it into the picture
   for (const res of sse) res.write(msg);
 }
 // Whatever has piled up goes to the director as ONE batch. Answers that arrive while it is busy

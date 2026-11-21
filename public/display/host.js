@@ -37,9 +37,10 @@ es.addEventListener('state', msg => {
   if (s.scene && s.scene.m) moodT.wind = Math.min(1, (s.scene.m.wind || 0) + 0.3 * stir);
   const have = new Set([...feedEl.children].map(c => +c.dataset.id)), want = new Set(s.feed.map(f => f.id));
   for (const c of [...feedEl.children]) if (!want.has(+c.dataset.id)) c.remove();
-  for (const f of s.feed.slice(0, 9).reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.textContent = f.text; feedEl.prepend(d); }
+  for (const f of [...s.feed].reverse()) if (!have.has(f.id)) { const d = document.createElement('div'); d.dataset.id = f.id; d.textContent = f.text; feedEl.prepend(d); }
   const inPicture = new Set(s.feed.filter(f => f.in).map(f => f.id));       // answers the director has worked into the picture change colour
   for (const c of feedEl.children) c.classList.toggle('in', inPicture.has(+c.dataset.id));
+  document.getElementById('tally').textContent = s.answers ? s.answers + (s.answers === 1 ? ' answer' : ' answers') + ' so far  ·  green = in the picture' : 'waiting for the first one';
 });
 es.addEventListener('accept', pop);
 fetch('/api/config').then(r => r.json()).then(c => {

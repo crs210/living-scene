@@ -53,8 +53,9 @@ const tone = document.createElement('canvas'); tone.width = tone.height = 10;
 let sc = 1, ox = 0, oy = 0, prev = performance.now(), fps = 60;
 const pops = [];
 let slow = 0.016;
-function resize() { const d = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * d; cv.height = innerHeight * d; const m = 0.035 * Math.min(cv.width, cv.height); sc = Math.min((cv.width - 2 * m) / 1600, (cv.height - 2 * m) / 900); ox = (cv.width - 1600 * sc) / 2; oy = (cv.height - 900 * sc) / 2; grainPat = g.createPattern(grain, 'repeat'); tonePat = g.createPattern(tone, 'repeat'); }
+function resize() { const d = Math.min(devicePixelRatio || 1, 2); cv.width = Math.max(1, cv.clientWidth * d); cv.height = Math.max(1, cv.clientHeight * d); const m = 0.035 * Math.min(cv.width, cv.height); sc = Math.min((cv.width - 2 * m) / 1600, (cv.height - 2 * m) / 900); ox = (cv.width - 1600 * sc) / 2; oy = (cv.height - 900 * sc) / 2; grainPat = g.createPattern(grain, 'repeat'); tonePat = g.createPattern(tone, 'repeat'); }
 addEventListener('resize', resize); resize();
+new ResizeObserver(resize).observe(cv);    // the picture also changes size when the answers list is shown or hidden
 
 function frame(now) {
   const dt = Math.min(0.1, (now - prev) / 1000), t = now / 1000; prev = now; fps += (1 / Math.max(dt, 0.001) - fps) * 0.05;

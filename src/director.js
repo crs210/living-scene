@@ -27,7 +27,8 @@ import { callModel, mockReply } from './model.js';
 
 export { FEELINGS };
 const clamp = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
-const MAX_ARRIVALS = 14;               // elements beyond the opening; the weakest theme gives way after that
+const MAX_ARRIVALS = 6;                // elements beyond the opening; past that the weakest quiet theme gives way
+const FULL_FRAME = 9;                  // with this many elements in all, nothing brand new may be added: ideas must go into what exists
 
 export function createDirector({ question: q0 }) {
   let question = q0;
@@ -88,7 +89,7 @@ export function createDirector({ question: q0 }) {
   const maxAdd = (n = 0) => phase() === 'settling' ? 1 : Math.min(5, Math.round(1 + effMag() * 3) + (n >= 8 ? 1 : 0));   // a big batch earns one more
 
   // Of the elements a reply may change, only some may be brand new; the rest must be rewrites, so ideas get combined.
-  const newCap = (n = 0) => phase() === 'settling' ? 1 : Math.max(1, Math.ceil(maxAdd(n) / 2));
+  const newCap = (n = 0) => live.size >= FULL_FRAME ? 0 : phase() === 'settling' ? 1 : Math.min(FULL_FRAME - live.size, Math.max(1, Math.ceil(maxAdd(n) / 2)));
   // Where things stand, from the footprints the model declares: what is piled up, and where there is room.
   const layout = () => layoutReport([...live.values()], camera);
 

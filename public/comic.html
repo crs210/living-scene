@@ -9,22 +9,29 @@
 <style>
   html, body { margin: 0; height: 100%; background: #e9dcc0; overflow: hidden; font-family: 'Patrick Hand', 'Segoe Print', 'Comic Sans MS', sans-serif; color: #15111c; }
   #q { font-family: 'Bangers', 'Impact', sans-serif !important; font-weight: 400 !important; letter-spacing: .06em; font-size: 2.9vh !important; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  /* the picture takes everything to the left of the answers list */
+  :root { --side: 24vw; }
+  body.nofeed, body.bare, body.code { --side: 0px; }
+  canvas { position: fixed; left: 0; top: 0; width: calc(100% - var(--side)); height: 100%; display: block; }
   .chrome { position: fixed; transition: opacity .5s; }
   body.bare .chrome { opacity: 0 !important; pointer-events: none; }
   #q { top: 4.5vh; left: 4.5vw; max-width: 46vw; font: 700 2.3vh/1.25 inherit; font-family: inherit; background: #f6c544; border: .45vh solid #15111c; padding: 1vh 1.6vh; box-shadow: .6vh .6vh 0 #15111c; transform: rotate(-1deg); }
   #join { bottom: 5vh; left: 4.5vw; display: flex; gap: 1.2vh; align-items: center; font: 700 1.7vh/1.3 inherit; font-family: inherit; background: #fbf6e9; border: .45vh solid #15111c; padding: 1vh; box-shadow: .6vh .6vh 0 #15111c; }
   #join img { width: 9.5vh; height: 9.5vh; display: block; }
   #join small { display: block; font-weight: 400; }
-  #feed { top: 4.5vh; right: 4vw; width: 22vw; max-height: 60vh; overflow: hidden; display: flex; flex-direction: column; gap: 1.2vh; }
-  body.nofeed #feed { opacity: 0; pointer-events: none; }
-  #feed div { background: #fbf6e9; border: .4vh solid #15111c; border-radius: 2.2vh; padding: 1vh 1.4vh; font-size: 1.6vh; line-height: 1.3; box-shadow: .45vh .45vh 0 #15111c; animation: in .4s cubic-bezier(.3,1.6,.6,1); }
-  #feed div { transition: background .8s, border-color .8s; border-style: dashed; }
-  #feed div.in { background: #bfe9d9; border-style: solid; }
-  #feed div:nth-child(n+5) { opacity: .65; } #feed div:nth-child(n+8) { opacity: .3; }
-  @keyframes in { from { opacity: 0; transform: scale(.7); } }
+  /* the answers: a plain list in its own column, newest first; a row turns green once it is in the picture */
+  #side { top: 0; right: 0; bottom: 0; width: var(--side); background: #fbf6e9; border-left: .45vh solid #15111c; display: flex; flex-direction: column; overflow: hidden; }
+  body.nofeed #side, body.bare #side, body.code #side { display: none; }
+  #side h2 { margin: 0; padding: 1.6vh 1.6vh 1.2vh; font: 400 2.6vh 'Bangers', 'Impact', sans-serif; letter-spacing: .06em; border-bottom: .3vh solid #15111c; background: #f6c544; }
+  #side h2 small { display: block; font: 400 1.5vh 'Patrick Hand', 'Segoe Print', sans-serif; letter-spacing: 0; margin-top: .3vh; }
+  #feed { flex: 1; overflow-y: auto; margin: 0; padding: 0; }
+  #feed div { padding: 1vh 1.6vh 1vh 3.6vh; font-size: 1.8vh; line-height: 1.3; border-bottom: .15vh solid #d8ccae; position: relative; color: #6b6478; transition: background .8s, color .8s; animation: in .4s ease-out; }
+  #feed div::before { content: '○'; position: absolute; left: 1.3vh; top: 1vh; }
+  #feed div.in { background: #bfe9d9; color: #15111c; }
+  #feed div.in::before { content: '✓'; color: #1d7a4f; font-weight: 700; }
+  @keyframes in { from { opacity: 0; transform: translateX(3vh); } }
   #code { top: 0; right: 0; bottom: 0; width: 36vw; background: rgba(21,17,28,.93); color: #e8e2d0; font: 1.35vh/1.45 ui-monospace, Consolas, monospace; padding: 2vh; overflow: auto; display: none; white-space: pre-wrap; }
-  body.code #code { display: block; } body.code #feed { display: none; }
+  body.code #code { display: block; }
   #code h3 { font: 700 1.6vh system-ui, sans-serif; color: #f6c544; margin: 0 0 .6vh; }
   #code .el { color: #9aa3b5; } #code .new { color: #57c7c2; }
   #dev { top: 0; left: 0; bottom: 0; width: 40vw; background: rgba(21,17,28,.93); color: #e8e2d0; font: 1.3vh/1.45 ui-monospace, Consolas, monospace; padding: 2vh; overflow: auto; display: none; }
@@ -50,7 +57,7 @@
 <canvas id="c"></canvas>
 <div id="q" class="chrome"></div>
 <div id="join" class="chrome"><img id="qr" alt=""><div>Answer on your phone<small id="url"></small></div></div>
-<div id="feed" class="chrome"></div>
+<aside id="side" class="chrome"><h2>Answers<small id="tally">waiting for the first one</small></h2><div id="feed"></div></aside>
 <div id="code" class="chrome"></div>
 <div id="dev" class="chrome"></div>
 <div id="controls" class="chrome">
