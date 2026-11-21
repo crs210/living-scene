@@ -87,7 +87,7 @@ export function createDirector({ question: q0 }) {
   let recent = zero(), total = zero(), weight = 0;
   let latest = null, busy = false, queue = [], wantFinal = false, wantConcepts = false, lastError = null, calls = [], opening = false, waiters = [], drawWaiters = [], drawQueue = [], lastBatch = [], inFlight = 0;
 
-  const model = process.env.DIRECTOR_MODEL || 'claude-sonnet-5-5';      // reads the room, sorts ideas, writes briefs, the opening and the final image
+  const model = process.env.DIRECTOR_MODEL || 'claude-opus-5-5';      // reads the room, sorts ideas, writes briefs, the opening and the final image
   const drawModel = process.env.DRAW_MODEL || model;               // writes each drawing from a brief (can be set to a different model with DRAW_MODEL)
   const API_CAP = Number(process.env.MAX_API_CALLS || 500);   // requests to the model per session, so a busy or hostile room cannot run up a bill
   let apiCalls = 0, capHit = false;

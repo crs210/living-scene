@@ -18,7 +18,8 @@ One run is not much evidence. It has not been timed with a large audience or wit
 - That run (an opening and three batches, 15 requests, about 23,500 output tokens) cost roughly
   30 US cents: about 8 cents a batch on Sonnet 5.5. This is an estimate from token counts.
   Opus 5.5 was tried for both jobs on 2026-11-21: reading took about 11 seconds and each drawing 11 to 15
-  (Sonnet: 8 to 9), at about twice the cost. The app went back to Sonnet 5.5 for both.
+  (Sonnet: 8 to 9), at about twice the cost. Opus 5.5 is the default for both; set DIRECTOR_MODEL and DRAW_MODEL to
+  claude-sonnet-5-5 for faster, cheaper batches.
 - Cost follows the number of batches, not the number of people.
 - The app stops calling the model after `MAX_API_CALLS` requests in a session (default 500). That
   is a count of requests, not a budget in money.
