@@ -2,9 +2,8 @@ services:
   - type: web
     name: living-scene
     runtime: node
-    plan: starter
+    plan: free          # no cost; sleeps after 15 minutes without visitors. Change to starter for an always-on instance.
     region: singapore
-    numInstances: 1
     branch: main
     autoDeployTrigger: checksPass
     buildCommand: npm ci --include=optional && npm test

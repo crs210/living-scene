@@ -83,4 +83,7 @@ addEventListener('keydown', e => {
 });
 for (const c of ['bare', 'nofeed', 'code', 'dev']) if (qs.has(c)) document.body.classList.add(c);
 window.comicDiag = () => { const i = info(); return { fps: Math.round(i.fps), Q: +i.quality.toFixed(2), phase: i.phase, themes: themesNow.map(th => th.key + ':' + th.count), els: i.order.map(([id, el]) => [id, el.errors]), slow: i.order.filter(e => e[1].tooSlow).map(e => e[0]), cost: Object.fromEntries(i.order.map(([id, el]) => [id, +(el.cost || 0).toFixed(2)])), mode: i.mode }; };
+// A free host puts the app to sleep when nobody has visited for a while, which would lose the session.
+// An open display counts as someone being here, so it says so every few minutes.
+setInterval(() => fetch('/api/config').catch(() => {}), 4 * 60 * 1000);
 start();

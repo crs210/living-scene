@@ -4,8 +4,7 @@
 
 1. In the [Render dashboard](https://dashboard.render.com/), choose **New > Blueprint**.
    Connect your GitHub account, grant access to `crs210/living-scene`, and choose `main`.
-   Render reads [render.yaml](../render.yaml). Review the price for one always-on Starter
-   instance in Singapore before applying. Both the phone page and projector run on this service.
+   Render reads [render.yaml](../render.yaml). It asks for one **free** instance in Singapore, so there is nothing to pay. Both the phone page and projector run on this service.
 2. Wait for the service to show **Live**. Open its assigned HTTPS address on a phone.
    The projector's join link and QR code use this same address automatically. Set
    `PUBLIC_URL` only if you want to advertise a custom domain.
@@ -15,6 +14,19 @@
 4. For live AI responses, add `ANTHROPIC_API_KEY` in **Environment**, save and deploy.
    The default limit is 500 model calls per session. Set `MAX_API_CALLS` to your preferred cap.
    Send an answer from a phone and check the projector before inviting the audience.
+
+### What the free plan means
+
+- **It sleeps after 15 minutes with no visitors**, and takes up to a minute to wake on the next
+  visit. Sleeping restarts the app, so a session in progress is lost.
+- An open display asks the app for something every four minutes to count as a visitor. Whether
+  that is enough to keep a free instance awake has not been tested on Render.
+- **Open the display a few minutes before you need it**, so the wake-up happens off stage, and
+  keep it open for the whole session.
+- 750 free hours a month per workspace. Files written while running (saved sessions, cached
+  openings) are lost on every restart.
+- For an event that matters, change `plan: free` to `plan: starter` in `render.yaml`: a few
+  dollars a month, and it never sleeps.
 
 ### Updating from main
 
