@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 3000);
 const QUESTION0 = process.env.QUESTION || 'What worries or excites you about where AI is going?';
 const nets = Object.values(os.networkInterfaces()).flat().filter(i => i && i.family === 'IPv4' && !i.internal).map(i => i.address);
 const lanIp = nets.find(a => /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a)) || nets[0] || 'localhost'; // prefer the Wi-Fi address over VPN ones
-const JOIN_URL = process.env.PUBLIC_URL || `http://${lanIp}:${PORT}/`;
+const JOIN_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://${lanIp}:${PORT}/`;
 
 const director = createDirector({ question: QUESTION0 });
 let version, pending, feed, drafts, clients, metrics, answers, nextId = 1, seq;

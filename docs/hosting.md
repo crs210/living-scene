@@ -1,7 +1,30 @@
 # Hosting
 
-The app has not been hosted anywhere yet. This page says what a host has to provide, so whoever
-sets it up (a person or a coding agent) knows what they are dealing with.
+## Deploy the whole app on Render
+
+1. In the [Render dashboard](https://dashboard.render.com/), choose **New > Blueprint**.
+   Connect your GitHub account, grant access to `crs210/living-scene`, and choose `main`.
+   Render reads [render.yaml](../render.yaml). Review the price for one always-on Starter
+   instance in Singapore before applying. Both the phone page and projector run on this service.
+2. Wait for the service to show **Live**. Open its assigned HTTPS address on a phone.
+   The projector's join link and QR code use this same address automatically. Set
+   `PUBLIC_URL` only if you want to advertise a custom domain.
+3. For the projector, reveal the generated `HOST_KEY` in the service's **Environment** settings.
+   On the presenter's device, open `/comic?key=<HOST_KEY>` at the service address. Keep that
+   bookmark private. Press **0** to try the recorded demo. The audience uses the plain service URL.
+4. For live AI responses, add `ANTHROPIC_API_KEY` in **Environment**, save and deploy.
+   The default limit is 500 model calls per session. Set `MAX_API_CALLS` to your preferred cap.
+   Send an answer from a phone and check the projector before inviting the audience.
+
+### Updating from main
+
+Merge your change into `main`. GitHub Actions runs the existing self-check. Render's
+**After CI Checks Pass** setting gates automatic deploys, and the build also runs the tests
+for an initial or manual deployment. In Render's **Events** view, confirm the live deploy
+has the same commit as GitHub. The audience URL and projector bookmark stay the same.
+
+A deploy or restart clears the active scene. Merge between events, or pause automatic
+deploys for the event and deploy the latest tested commit when the room is finished.
 
 ## What the app is, from a host's point of view
 

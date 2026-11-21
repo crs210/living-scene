@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: living-scene
+    runtime: node
+    plan: starter
+    region: singapore
+    numInstances: 1
+    branch: main
+    autoDeployTrigger: checksPass
+    buildCommand: npm ci --include=optional && npm test
+    startCommand: node server.js
+    healthCheckPath: /api/config
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST_KEY
+        generateValue: true
+      - key: MAX_API_CALLS
+        value: "500"
