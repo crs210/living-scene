@@ -72,7 +72,7 @@ is a replay while it runs.
 
 | Mode | How | Notes |
 |---|---|---|
-| Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. One worker in two steps (`--role solo`: a quick read of each batch, then the drawings one at a time, new answers always read first), one worker doing a whole batch per reply (no role), or a reader (`--role read`) plus several cartoonists (`--role draw`). Briefs beyond a round's allowance wait in a backlog; nothing is dropped. See `HANDOFF.md` for the worker briefs. |
+| Test session (default) | no API key | Requests wait in a queue for a Claude Code session to answer with `tools/director-wait.js` and `tools/director-reply.js`. One worker in two steps (`--role solo`: a quick read of each batch, then the drawings one at a time, new answers always read first), one worker doing a whole batch per reply (no role), or a reader (`--role read`) plus several cartoonists (`--role draw`). Briefs beyond a round's allowance wait in a backlog; nothing is dropped. Each tool prints its usage at the top of its file. |
 | API | `ANTHROPIC_API_KEY` in `.env` | Automatic: a fast pass (feelings, themes, numbers, briefs), then one request per drawing in parallel. `DIRECTOR_MODEL` reads the room, `DRAW_MODEL` draws (both default `claude-sonnet-5-5`). First run for real on 2026-11-21. |
 | Mock | `DIRECTOR_MOCK=1` | Canned replies through the API path. Tests plumbing only. |
 
